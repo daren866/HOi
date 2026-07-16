@@ -22,8 +22,8 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C70 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C62 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C64 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C62 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C64 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C71 /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
