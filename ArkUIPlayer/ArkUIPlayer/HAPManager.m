@@ -224,10 +224,18 @@ static HAPManager *_sharedInstance = nil;
         return NO;
     }
     
-    NSString *shellCommand = [NSString stringWithFormat:@"unzip -q \"%@\" -d \"%@\"", zipPath, unzipPath];
-    int status = system([shellCommand UTF8String]);
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @"/usr/bin/unzip";
+    task.arguments = @[@"-q", zipPath, @"-d", unzipPath];
     
-    if (status != 0) {
+    NSPipe *pipe = [NSPipe pipe];
+    task.standardOutput = pipe;
+    task.standardError = pipe;
+    
+    [task launch];
+    [task waitUntilExit];
+    
+    if (task.terminationStatus != 0) {
         return NO;
     }
     
