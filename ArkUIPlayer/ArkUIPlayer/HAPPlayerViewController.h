@@ -1,7 +1,8 @@
 #import <UIKit/UIKit.h>
+#import "../stage/ability/StageViewController.h"
 #import "HAPManager.h"
 
-@interface HAPPlayerViewController : UIViewController
+@interface HAPPlayerViewController : StageViewController
 
 @property (nonatomic, strong) HAPManager *hapManager;
 

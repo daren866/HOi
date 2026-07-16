@@ -40,6 +40,9 @@ static HAPManager *_sharedInstance = nil;
     if (self.isInitialized) {
         return;
     }
+    
+    [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
+    [StageApplication launchApplication];
     self.isInitialized = YES;
 }
 
@@ -303,9 +306,11 @@ static HAPManager *_sharedInstance = nil;
 }
 
 - (void)callCurrentAbilityOnForeground {
+    [StageApplication callCurrentAbilityOnForeground];
 }
 
 - (void)callCurrentAbilityOnBackground {
+    [StageApplication callCurrentAbilityOnBackground];
 }
 
 - (void)unloadCurrentHAP {

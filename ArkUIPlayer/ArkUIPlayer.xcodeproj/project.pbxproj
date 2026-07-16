@@ -13,6 +13,17 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* StageApplication.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* StageApplication.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* StageViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* StageViewController.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C85 /* StageAssetManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* StageAssetManager.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C87 /* StageConfigurationManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C88 /* StageConfigurationManager.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C89 /* StageContainerView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8A /* StageContainerView.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8B /* StageSecureContainerView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8C /* StageSecureContainerView.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8D /* WindowView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8E /* WindowView.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8F /* InstanceIdGenerator.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C90 /* InstanceIdGenerator.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C91 /* ace_bridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C92 /* ace_bridge.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C93 /* AcePlatformPlugin.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C94 /* AcePlatformPlugin.mm */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C95 /* WantParams.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C96 /* WantParams.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +39,17 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* StageApplication.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageApplication.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* StageViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageViewController.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* StageAssetManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageAssetManager.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C88 /* StageConfigurationManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageConfigurationManager.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8A /* StageContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageContainerView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8C /* StageSecureContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageSecureContainerView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8E /* WindowView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/WindowView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C90 /* InstanceIdGenerator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/InstanceIdGenerator.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C92 /* ace_bridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/ace_bridge.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C94 /* AcePlatformPlugin.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/AcePlatformPlugin.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C96 /* WantParams.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/WantParams.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,10 +81,37 @@
 			path = ArkUIPlayer;
 			sourceTree = "<group>";
 		};
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C97 = {
+			isa = PBXGroup;
+			children = (
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* StageApplication.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* StageViewController.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* StageAssetManager.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C88 /* StageConfigurationManager.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8A /* StageContainerView.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8C /* StageSecureContainerView.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C90 /* InstanceIdGenerator.mm */,
+			);
+			path = stage/ability;
+			sourceTree = "<group>";
+		};
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C98 = {
+			isa = PBXGroup;
+			children = (
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8E /* WindowView.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C92 /* ace_bridge.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C94 /* AcePlatformPlugin.mm */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C96 /* WantParams.mm */,
+			);
+			path = entrance;
+			sourceTree = "<group>";
+		};
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C76 = {
 			isa = PBXGroup;
 			children = (
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C75,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C97,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C98,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6F /* ArkUIPlayer.app */,
 			);
 			sourceTree = "<group>";
@@ -129,6 +178,17 @@
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* StageApplication.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* StageViewController.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C85 /* StageAssetManager.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C87 /* StageConfigurationManager.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C89 /* StageContainerView.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8B /* StageSecureContainerView.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8D /* WindowView.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8F /* InstanceIdGenerator.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C91 /* ace_bridge.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C93 /* AcePlatformPlugin.mm in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C95 /* WantParams.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -260,6 +320,10 @@
 				INFOPLIST_FILE = ArkUIPlayer/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				OTHER_CFLAGS = (
+					"-DIOS_PLATFORM",
+					"-DWEB_SUPPORTED",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.ArkUIPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -277,6 +341,10 @@
 				INFOPLIST_FILE = ArkUIPlayer/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				OTHER_CFLAGS = (
+					"-DIOS_PLATFORM",
+					"-DWEB_SUPPORTED",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.ArkUIPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = "1,2";
