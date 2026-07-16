@@ -1,5 +1,5 @@
 #import <UIKit/UIKit.h>
-#import <libarkui_ios/StageViewController.h>
+#import "../../stage/ability/StageViewController.h"
 #import "HAPManager.h"
 
 @interface HAPPlayerViewController : StageViewController
