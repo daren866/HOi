@@ -39,17 +39,17 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* StageApplication.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageApplication.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* StageViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageViewController.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* StageAssetManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageAssetManager.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C88 /* StageConfigurationManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageConfigurationManager.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8A /* StageContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageContainerView.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8C /* StageSecureContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/StageSecureContainerView.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8E /* WindowView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/WindowView.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C90 /* InstanceIdGenerator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../stage/ability/InstanceIdGenerator.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C92 /* ace_bridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/ace_bridge.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C94 /* AcePlatformPlugin.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/AcePlatformPlugin.mm; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C96 /* WantParams.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../entrance/WantParams.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* StageApplication.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageApplication.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* StageViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageViewController.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* StageAssetManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageAssetManager.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C88 /* StageConfigurationManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageConfigurationManager.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8A /* StageContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageContainerView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8C /* StageSecureContainerView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/StageSecureContainerView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C8E /* WindowView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../entrance/WindowView.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C90 /* InstanceIdGenerator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../stage/ability/InstanceIdGenerator.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C92 /* ace_bridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../entrance/ace_bridge.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C94 /* AcePlatformPlugin.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../entrance/AcePlatformPlugin.mm; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C96 /* WantParams.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../entrance/WantParams.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
