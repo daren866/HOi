@@ -268,13 +268,12 @@ jobs:
       run: |
         echo "🔍 Cloning ArkUI-X dependencies..."
         
-        mkdir -p foundation/arkui/ace_engine/frameworks
-        mkdir -p foundation/arkui/ace_engine/interfaces
-        mkdir -p foundation/appframework
-        mkdir -p foundation/arkui/napi
-        mkdir -p base/hiviewdfx/hilog
-        mkdir -p commonlibrary/c_utils
-        mkdir -p foundation/graphic/graphic_2d
+        rm -rf foundation/arkui/ace_engine
+        rm -rf foundation/appframework
+        rm -rf foundation/arkui/napi
+        rm -rf base/hiviewdfx/hilog
+        rm -rf commonlibrary/c_utils
+        rm -rf foundation/graphic/graphic_2d
 
         git clone --depth 1 --sparse https://github.com/openharmony/ace_engine.git foundation/arkui/ace_engine
         cd foundation/arkui/ace_engine
