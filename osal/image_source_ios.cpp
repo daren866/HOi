@@ -1,0 +1,223 @@
+/*
+ * Copyright (c) 2023 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "image_source_ios.h"
+
+#include "image_source.h"
+#include "media_errors.h"
+#include "image_type.h"
+#include "pixel_map_ios.h"
+#include "base/image/pixel_map.h"
+#include "base/log/log_wrapper.h"
+
+namespace OHOS::Ace {
+RefPtr<ImageSource> ImageSource::Create(int32_t fd)
+{
+    uint32_t errorCode;
+    Media::SourceOptions options;
+    auto src = Media::ImageSource::CreateImageSource(fd, options, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        LOGE("create image source failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return MakeRefPtr<ImageSourceIOS>(std::move(src));
+}
+
+RefPtr<ImageSource> ImageSource::Create(const uint8_t* data, uint32_t size, uint32_t& errorCode)
+{
+    Media::SourceOptions options;
+    auto src = Media::ImageSource::CreateImageSource(data, size, options, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        LOGE("create image source failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return MakeRefPtr<ImageSourceIOS>(std::move(src));
+}
+
+RefPtr<ImageSource> ImageSource::Create(const uint8_t* data, uint32_t size)
+{
+    uint32_t errorCode = 0;
+    Media::SourceOptions options;
+    auto src = Media::ImageSource::CreateImageSource(data, size, options, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGE(AceLogTag::ACE_IMAGE, "create image source failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return MakeRefPtr<ImageSourceIOS>(std::move(src));
+}
+
+RefPtr<ImageSource> ImageSource::Create(const std::string& filePath)
+{
+    Media::SourceOptions opts;
+    opts.formatHint = "image/svg+xml";
+    uint32_t errorCode = 0;
+    auto src = Media::ImageSource::CreateImageSource(filePath, opts, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE, "create image source failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return MakeRefPtr<ImageSourceIOS>(std::move(src));
+}
+
+bool ImageSource::IsAstc(const uint8_t* data, size_t size)
+{
+    return false;
+}
+
+ImageSource::Size ImageSource::GetASTCInfo(const uint8_t* data, size_t size)
+{
+    return { 0, 0 };
+}
+
+std::string ImageSourceIOS::GetProperty(const std::string& key)
+{
+    std::string value;
+    uint32_t res = imageSource_->GetImagePropertyString(0, key, value);
+    if (res != Media::SUCCESS) {
+        LOGE("Get ImageSource property %{public}s failed, errorCode = %{public}u", key.c_str(), res);
+    }
+    return value;
+}
+
+RefPtr<PixelMap> ImageSourceIOS::CreatePixelMap(
+    const Size& size, uint32_t& errorCode, const PixelMapConfig& pixelMapConfig)
+{
+    return CreatePixelMap(0, size, errorCode, pixelMapConfig);
+}
+
+RefPtr<PixelMap> ImageSourceIOS::CreatePixelMap(
+    uint32_t index, const Size& size, uint32_t& errorCode, const PixelMapConfig& pixelMapConfig)
+{
+    Media::DecodeOptions options;
+    if (size.first > 0 && size.second > 0) {
+        options.desiredSize = { size.first, size.second };
+    }
+    auto pixmap = imageSource_->CreatePixelMapEx(index, options, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        LOGW("create PixelMap from ImageSource failed, index = %{public}u, errorCode = %{public}u", index, errorCode);
+        return nullptr;
+    }
+    return PixelMap::Create(std::move(pixmap));
+}
+
+RefPtr<PixelMap> ImageSourceIOS::CreatePixelMap()
+{
+    uint32_t errorCode;
+    Media::DecodeOptions decodeOpts;
+    auto pixelMap = imageSource_->CreatePixelMap(decodeOpts, errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE,
+            "create PixelMap from ImageSource failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return PixelMap::Create(std::move(pixelMap));
+}
+
+RefPtr<PixelMap> ImageSourceIOS::CreatePixelMap(const DecodeOptions& options)
+{
+    uint32_t errorCode;
+    Media::DecodeOptions decodeOpts;
+    decodeOpts.desiredPixelFormat = PixelMapIOS::ConvertToMediaPixelFormat(options.desiredFormat);
+    auto pixelmap = imageSource_->CreatePixelMap(decodeOpts, errorCode);
+    if (errorCode != Media::SUCCESS || !pixelmap) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE, "create pixelmap failed, errorCode = %{public}u", errorCode);
+        return nullptr;
+    }
+    return PixelMap::Create(std::move(pixelmap));
+}
+
+ImageSource::Size ImageSourceIOS::GetImageSize()
+{
+    Media::ImageInfo info;
+    auto errorCode = imageSource_->GetImageInfo(info);
+    if (errorCode != Media::SUCCESS) {
+        LOGW("Get ImageSource info failed, errorCode = %{public}u", errorCode);
+        return { 0, 0 };
+    }
+    return { info.size.width, info.size.height };
+}
+
+uint32_t ImageSourceIOS::GetFrameCount()
+{
+    uint32_t errorCode;
+    auto frameCount = imageSource_->GetFrameCount(errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE, "Get image frame count failed, errorCode = %{public}u", errorCode);
+        return 0;
+    }
+    return frameCount;
+}
+
+int32_t ImageSourceIOS::GetLoopCount()
+{
+    uint32_t errorCode;
+    auto loopCount = imageSource_->GetLoopCount(errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE, "Get image loop count failed, errorCode = %{public}u", errorCode);
+        return 0;
+    }
+    return loopCount;
+}
+
+std::vector<int32_t> ImageSourceIOS::GetDelayTime()
+{
+    uint32_t errorCode;
+    auto delayTime = imageSource_->GetDelayTime(errorCode);
+    if (errorCode != Media::SUCCESS) {
+        TAG_LOGW(AceLogTag::ACE_IMAGE, "Get image delay time failed, errorCode = %{public}u", errorCode);
+        return {};
+    }
+    return std::move(*delayTime.release());
+}
+
+std::string ImageSourceIOS::GetEncodedFormat()
+{
+    return "";
+}
+
+bool ImageSourceIOS::IsHeifWithoutAlpha()
+{
+    return false;
+}
+
+ImageRotateOrientation GetImageSourceRotateOrientation(std::string origin)
+{
+    if (origin == "Top-right") {
+        return ImageRotateOrientation::UP_MIRRORED;
+    } else if (origin == "Bottom-right") {
+        return ImageRotateOrientation::DOWN;
+    } else if (origin == "Bottom-left") {
+        return ImageRotateOrientation::DOWN_MIRRORED;
+    } else if (origin == "Left-top") {
+        return ImageRotateOrientation::LEFT_MIRRORED;
+    } else if (origin == "Right-top") {
+        return ImageRotateOrientation::RIGHT;
+    } else if (origin == "Right-bottom") {
+        return ImageRotateOrientation::RIGHT_MIRRORED;
+    } else if (origin == "Left-bottom") {
+        return ImageRotateOrientation::LEFT;
+    } else if (origin == "Top-left") {
+        return ImageRotateOrientation::UP;
+    } else {
+        return ImageRotateOrientation::UP;
+    }
+}
+
+ImageRotateOrientation ImageSourceIOS::GetImageOrientation()
+{
+    auto origin = GetProperty("Orientation");
+    return GetImageSourceRotateOrientation(origin);
+}
+} // namespace OHOS::Ace

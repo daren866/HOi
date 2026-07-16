@@ -1,0 +1,60 @@
+/**
+ * Copyright (c) 2024-2026 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "core/common/display_info_utils.h"
+
+#include "display_manager.h"
+#include "core/common/display_info.h"
+
+namespace OHOS::Ace {
+RefPtr<DisplayInfo> DisplayInfoUtils::GetDisplayInfo(int32_t displayId)
+{
+    auto display = Rosen::DisplayManager::GetInstance().GetDefaultDisplaySync();
+    CHECK_NULL_RETURN(display, displayInfo_);
+    auto dmDisplayInfo = display->GetDisplayInfo();
+    CHECK_NULL_RETURN(dmDisplayInfo, displayInfo_);
+    displayInfo_->SetWidth(dmDisplayInfo->GetWidth());
+    displayInfo_->SetHeight(dmDisplayInfo->GetHeight());
+    displayInfo_->SetDisplayId(dmDisplayInfo->GetDisplayId());
+    auto dmRotation = dmDisplayInfo->GetRotation();
+    displayInfo_->SetRotation(static_cast<Rotation>(static_cast<uint32_t>(dmRotation)));
+    displayInfo_->SetDisplaySourceMode(DisplaySourceMode::NONE);
+    return displayInfo_;
+}
+
+void DisplayInfoUtils::InitIsFoldable() {}
+
+bool DisplayInfoUtils::GetIsFoldable()
+{
+    hasInitIsFoldable_ = true;
+    return false;
+}
+
+FoldStatus DisplayInfoUtils::GetCurrentFoldStatus()
+{
+    return FoldStatus::UNKNOWN;
+}
+
+DisplaySourceMode DisplayInfoUtils::GetDisplaySourceMode()
+{
+    return displayInfo_->GetDisplaySourceMode();
+}
+
+std::vector<Rect> DisplayInfoUtils::GetCurrentFoldCreaseRegion()
+{
+    hasInitFoldCreaseRegion_ = true;
+    return {};
+}
+} // namespace OHOS::Ace::DisplayInfoUtils

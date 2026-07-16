@@ -1,0 +1,327 @@
+name: ArkUI iOS Platform Adaptation CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**.cpp'
+      - '**.h'
+      - '**.mm'
+      - '**.m'
+      - '**.gn'
+      - '**.gni'
+      - '.clang-format'
+      - '.github/workflows/build.yml'
+      - 'ArkUIPlayer/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '**.cpp'
+      - '**.h'
+      - '**.mm'
+      - '**.m'
+      - '**.gn'
+      - '**.gni'
+      - '.clang-format'
+      - 'ArkUIPlayer/**'
+
+jobs:
+  lint:
+    name: Code Linting & Formatting
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install clang-format
+      run: |
+        brew install clang-format
+
+    - name: Check code formatting
+      run: |
+        echo "🔍 Checking code formatting with clang-format..."
+        find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mm" -o -name "*.m" \) \
+          -not -path "./.git/*" \
+          -exec clang-format --dry-run --Werror {} \;
+        echo "✅ Code formatting check passed!"
+
+  file-check:
+    name: File Structure Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate required BUILD.gn files
+      run: |
+        echo "🔍 Validating BUILD.gn files structure..."
+        
+        REQUIRED_BUILD_FILES=(
+          "build/BUILD.gn"
+          "entrance/BUILD.gn"
+          "stage/ability/BUILD.gn"
+          "stage/uicontent/BUILD.gn"
+          "osal/BUILD.gn"
+          "capability/BUILD.gn"
+        )
+        
+        MISSING_FILES=()
+        for file in "${REQUIRED_BUILD_FILES[@]}"; do
+          if [ ! -f "$file" ]; then
+            MISSING_FILES+=("$file")
+          fi
+        done
+        
+        if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+          echo "❌ Missing required BUILD.gn files:"
+          for file in "${MISSING_FILES[@]}"; do
+            echo "  - $file"
+          done
+          exit 1
+        else
+          echo "✅ All required BUILD.gn files exist"
+        fi
+
+    - name: Validate config.gni and platform.gni
+      run: |
+        echo "🔍 Validating GN configuration files..."
+        
+        if [ ! -f "build/config.gni" ]; then
+          echo "❌ Missing build/config.gni"
+          exit 1
+        fi
+        
+        if [ ! -f "build/platform.gni" ]; then
+          echo "❌ Missing build/platform.gni"
+          exit 1
+        fi
+        
+        echo "✅ GN configuration files exist"
+
+    - name: Validate BUILD.gn source file references
+      run: |
+        echo "🔍 Validating source file references in BUILD.gn files..."
+        
+        ERROR_COUNT=0
+        
+        for gn_file in $(find . -name "BUILD.gn" -not -path "./.git/*"); do
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^\s*(sources|deps|include_dirs)\s*='; then
+              continue
+            fi
+            
+            matched_files=$(echo "$line" | grep -oE '"[^"]+\.(cpp|h|mm|m)"' | sed 's/"//g')
+            for ref_file in $matched_files; do
+              gn_dir=$(dirname "$gn_file")
+              full_path="$gn_dir/$ref_file"
+              
+              if [ ! -f "$full_path" ]; then
+                echo "❌ $gn_file references missing file: $ref_file"
+                ERROR_COUNT=$((ERROR_COUNT + 1))
+              fi
+            done
+          done < "$gn_file"
+        done
+        
+        if [ $ERROR_COUNT -gt 0 ]; then
+          echo "❌ Found $ERROR_COUNT missing file references in BUILD.gn"
+          exit 1
+        else
+          echo "✅ All BUILD.gn source file references are valid"
+        fi
+
+    - name: Check for orphaned source files
+      run: |
+        echo "🔍 Checking for source files not referenced in BUILD.gn..."
+        
+        all_sources=$(find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.mm" -o -name "*.m" \) \
+          -not -path "./.git/*" | sort)
+        
+        referenced_sources=$(grep -h -oE '"[^"]+\.(cpp|h|mm|m)"' $(find . -name "BUILD.gn" -not -path "./.git/*") | \
+          sed 's/"//g' | sort)
+        
+        orphaned_files=()
+        while IFS= read -r source_file; do
+          file_name=$(basename "$source_file")
+          if ! echo "$referenced_sources" | grep -q "$file_name"; then
+            orphaned_files+=("$source_file")
+          fi
+        done <<< "$all_sources"
+        
+        if [ ${#orphaned_files[@]} -gt 0 ]; then
+          echo "⚠️ Found ${#orphaned_files[@]} potential orphaned files:"
+          for file in "${orphaned_files[@]}"; do
+            echo "  - $file"
+          done
+        else
+          echo "✅ No orphaned source files found"
+        fi
+
+  header-check:
+    name: Header Guard Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate header guards
+      run: |
+        echo "🔍 Validating header guards in .h files..."
+        
+        ERROR_COUNT=0
+        
+        for header_file in $(find . -name "*.h" -not -path "./.git/*"); do
+          file_name=$(basename "$header_file")
+          expected_guard=$(echo "$file_name" | tr 'a-z.' 'A-Z_' | sed 's/__$//')
+          
+          first_line=$(head -n 1 "$header_file")
+          last_line=$(tail -n 1 "$header_file")
+          
+          if ! grep -q "^#ifndef $expected_guard" "$header_file"; then
+            echo "❌ $header_file: Missing or incorrect #ifndef guard (expected: $expected_guard)"
+            ERROR_COUNT=$((ERROR_COUNT + 1))
+          fi
+          
+          if ! grep -q "^#define $expected_guard" "$header_file"; then
+            echo "❌ $header_file: Missing or incorrect #define guard"
+            ERROR_COUNT=$((ERROR_COUNT + 1))
+          fi
+          
+          if ! grep -q "^#endif" "$header_file"; then
+            echo "❌ $header_file: Missing #endif"
+            ERROR_COUNT=$((ERROR_COUNT + 1))
+          fi
+        done
+        
+        if [ $ERROR_COUNT -gt 0 ]; then
+          echo "❌ Found $ERROR_COUNT header guard issues"
+          exit 1
+        else
+          echo "✅ All header guards are valid"
+        fi
+
+  syntax-check:
+    name: Basic Syntax Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install cppcheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
+
+    - name: Run cppcheck for syntax errors
+      run: |
+        echo "🔍 Running cppcheck for basic syntax errors..."
+        
+        cppcheck --quiet --error-exitcode=1 \
+          --enable=warning \
+          --suppress=missingInclude \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --suppress=unusedVariable \
+          . 2>&1 || true
+        
+        echo "✅ Basic syntax check completed"
+
+  build-app:
+    name: Build ArkUIPlayer App
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: 'latest'
+
+    - name: Build ArkUIPlayer
+      run: |
+        echo "🔍 Building ArkUIPlayer app..."
+        
+        xcodebuild -project ArkUIPlayer/ArkUIPlayer.xcodeproj \
+          -scheme ArkUIPlayer \
+          -destination 'generic/platform=iOS' \
+          -configuration Debug \
+          build \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          IPHONEOS_DEPLOYMENT_TARGET=13.0
+        
+        echo "✅ ArkUIPlayer build completed successfully"
+
+    - name: Archive ArkUIPlayer
+      run: |
+        echo "🔍 Archiving ArkUIPlayer app..."
+        
+        xcodebuild -project ArkUIPlayer/ArkUIPlayer.xcodeproj \
+          -scheme ArkUIPlayer \
+          -destination 'generic/platform=iOS' \
+          -configuration Release \
+          archive \
+          -archivePath ArkUIPlayer.xcarchive \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          IPHONEOS_DEPLOYMENT_TARGET=13.0
+        
+        echo "✅ ArkUIPlayer archive completed successfully"
+
+    - name: Package unsigned IPA manually
+      run: |
+        echo "🔍 Packaging unsigned IPA manually..."
+        
+        APP_PATH=$(find ArkUIPlayer.xcarchive -name "*.app" | head -1)
+        
+        if [ -z "$APP_PATH" ]; then
+          echo "❌ .app file not found in xcarchive!"
+          ls -la ArkUIPlayer.xcarchive/Products/Applications/ 2>/dev/null || echo "Directory does not exist"
+          exit 1
+        fi
+        
+        echo "Found .app at: $APP_PATH"
+        
+        mkdir -p ArkUIPlayer-IPA/Payload
+        cp -r "$APP_PATH" ArkUIPlayer-IPA/Payload/
+        
+        cd ArkUIPlayer-IPA
+        zip -r ArkUIPlayer.ipa Payload/
+        cd ..
+        
+        echo "✅ Unsigned IPA packaged successfully"
+
+    - name: Verify unsigned IPA
+      run: |
+        echo "🔍 Verifying unsigned IPA..."
+        
+        ls -la ArkUIPlayer-IPA/
+        
+        if [ -f "ArkUIPlayer-IPA/ArkUIPlayer.ipa" ]; then
+          echo "✅ IPA file exists: ArkUIPlayer-IPA/ArkUIPlayer.ipa"
+          file_size=$(du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa | cut -f1)
+          echo "✅ IPA size: $file_size"
+        else
+          echo "❌ IPA file not found!"
+          exit 1
+        fi
+
+    - name: Upload unsigned IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArkUIPlayer-unsigned
+        path: ArkUIPlayer-IPA/ArkUIPlayer.ipa
+        retention-days: 7

@@ -1,0 +1,570 @@
+# Copyright (c) 2022-2026 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/config/config.gni")
+import("//build/ohos.gni")
+import("//build_plugins/config/ios/ios_sdk.gni")
+import("//foundation/arkui/ace_engine/ace_config.gni")
+import("//third_party/icu/icu.gni")
+
+# import(
+#     "//foundation/arkui/ace_engine/frameworks/core/components_ng/components_plugin.gni")
+import("//foundation/arkui/ace_engine/interfaces/napi/kits/napi_lib.gni")
+import("//plugins/component/components.gni")
+import("//plugins/plugin_lib.gni")
+import("config.gni")
+
+# combine framework and xcframework
+ohos_combine_darwin_framework("libarkui_ios") {
+  deps = [ ":arkui_ios" ]
+
+  _export_framework_headers = [
+    "$ace_root/adapter/ios/capability/bridge/BridgePlugin.h",
+    "$ace_root/adapter/ios/capability/bridge/BridgePluginManager.h",
+    "$ace_root/adapter/ios/capability/bridge/MethodData.h",
+    "$ace_root/adapter/ios/capability/bridge/ResultValue.h",
+    "$ace_root/adapter/ios/capability/bridge/TaskOption.h",
+    "$ace_root/adapter/ios/capability/bridge/codec/BridgeArray.h",
+    "$ace_root/adapter/ios/capability/platformview/IPlatformView.h",
+    "$ace_root/adapter/ios/capability/platformview/PlatformViewFactory.h",
+    "$ace_root/adapter/ios/stage/ability/AbilityLoader.h",
+    "$ace_root/adapter/ios/stage/ability/StageViewController.h",
+    "$ace_root/adapter/ios/stage/ability/StageApplication.h",
+    "$ace_root/adapter/ios/entrance/plugin_lifecycle/IArkUIXPlugin.h",
+    "$ace_root/adapter/ios/entrance/plugin_lifecycle/PluginContext.h",
+    "$ace_root/adapter/ios/entrance/logIntercept/ILogger.h",
+    "$ace_root/adapter/ios/entrance/WantParams.h",
+  ]
+
+  subsystem_name = "arkui"
+  part_name = "arkui-x"
+}
+
+# libace target
+# Clang runtime for iOS (provides ___chkstk_darwin used by MoltenVK).
+#
+# GN build config forbids calling exec_script() here (whitelist restriction),
+# so we resolve the actual clang runtime directory by copying it at build
+# time via an action target.
+_xcode_dev = get_path_info(get_path_info(get_path_info(get_path_info(get_path_info(ios_device_sdk_path, "dir"), "dir"), "dir"), "dir"), "dir")
+
+# Simulator links must use libclang_rt.iossim.a; device uses libclang_rt.ios.a (see collect_clang_rt_ios_a.sh).
+_clang_rt_darwin_kind = "ios"
+if (defined(use_ios_simulator) && use_ios_simulator) {
+  _clang_rt_darwin_kind = "iossim"
+}
+
+action("clang_rt_ios_collect") {
+  script = "//build_plugins/config/ios/collect_clang_rt_ios_a.sh"
+  inputs = [ "//build_plugins/config/ios/collect_clang_rt_ios_a.sh" ]
+  outputs = [ "${target_gen_dir}/libclang_rt.ios.a" ]
+  args = [
+    _xcode_dev,
+    rebase_path("${target_gen_dir}/libclang_rt.ios.a", root_build_dir),
+    _clang_rt_darwin_kind,
+  ]
+}
+
+# Path to copied libclang_rt.ios.a for -force_load (so ___chkstk_darwin is always pulled in after MoltenVK).
+_clang_rt_ios_out =
+    get_label_info(":clang_rt_ios_collect", "target_gen_dir") +
+    "/libclang_rt.ios.a"
+_clang_rt_ios_force_load_path = rebase_path(_clang_rt_ios_out, root_build_dir)
+
+ohos_shared_library("arkui_ios") {
+  ldflags = [
+    "-Wl",
+    "-install_name",
+    "@rpath/libarkui_ios.framework/libarkui_ios",
+    "-Wl,-force_load," + _clang_rt_ios_force_load_path,
+    
+    # libace_ndk.framework references these symbols via dynamic_lookup at
+    # runtime. After ace_static_ndk was extracted into libace_ndk, nothing
+    # inside libarkui_ios references them anymore, so -dead_strip drops
+    # them despite -exported_symbols_list. -u forces the linker to treat
+    # each as undefined-from-outside, keeping them alive through dead_strip
+    # so the matching libarkui_ios.txt entries can take effect.
+    "-Wl,-u,__ZN4OHOS3Ace14CallbackLoggerC1ERKNSt3__112basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEm",
+    "-Wl,-u,__ZN4OHOS3Ace14CallbackLoggerD1Ev",
+    "-Wl,-u,__ZN4OHOS3Ace2V212FLEX_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V212GRID_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V212LIST_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V213RADIO_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V214CUSTOM_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V214TOGGLE_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V215REFRESH_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V216ARC_LIST_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V216PROGRESS_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V216TEXTAREA_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217CHECK_BOX_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217FLOW_ITEM_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217GRID_ITEM_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217LIST_ITEM_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217TEXTINPUT_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V217WATERFLOW_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V218IMAGE_SPAN_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V218XCOMPONENT_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V219DATE_PICKER_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V219TEXT_PICKER_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V219TIME_PICKER_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V221ARC_LIST_ITEM_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V222ARC_SCROLL_BAR_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V222IMAGE_ANIMATOR_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V222UNDEFINED_NODE_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V223LIST_ITEM_GROUP_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V224CONTAINER_PICKER_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V224CUSTOM_SPAN_NODE_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V224LOADING_PROGRESS_ETS_TAGE",
+    "-Wl,-u,__ZN4OHOS3Ace2V226EMBEDDED_COMPONENT_ETS_TAGE",
+
+    # c_utils symbols (Parcel/RWLock/string utils) referenced by libace_ndk
+    # via dynamic_lookup. Same dead_strip survival pattern as above.
+    "-Wl,-u,__ZN4OHOS10ParcelableC2Ev",
+    "-Wl,-u,__ZN4OHOS11GetDirFilesERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEERNS0_6vectorIS6_NS4_IS6_EEEE",
+    "-Wl,-u,__ZN4OHOS12IsNumericStrERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE",
+    "-Wl,-u,__ZN4OHOS13IsSameTextStrERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEES8_",
+    "-Wl,-u,__ZN4OHOS14ExtractFileExtERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE",
+    "-Wl,-u,__ZN4OHOS14PathToRealPathERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEERS6_",
+    "-Wl,-u,__ZN4OHOS5Utils6RWLock10UnLockReadEv",
+    "-Wl,-u,__ZN4OHOS5Utils6RWLock11UnLockWriteEv",
+    "-Wl,-u,__ZN4OHOS5Utils6RWLock8LockReadEv",
+    "-Wl,-u,__ZN4OHOS5Utils6RWLock9LockWriteEv",
+    "-Wl,-u,__ZN4OHOS5Utils6RWLockC1Eb",
+    "-Wl,-u,__ZN4OHOS6Parcel10ReadStringERNSt3__112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE",
+    "-Wl,-u,__ZN4OHOS6Parcel10ReadUint64ERy",
+    "-Wl,-u,__ZN4OHOS6Parcel10WriteFloatEf",
+    "-Wl,-u,__ZN4OHOS6Parcel10WriteInt32Ei",
+    "-Wl,-u,__ZN4OHOS6Parcel11WriteBufferEPKvm",
+    "-Wl,-u,__ZN4OHOS6Parcel11WriteStringERKNSt3__112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEE",
+    "-Wl,-u,__ZN4OHOS6Parcel11WriteUint32Ej",
+    "-Wl,-u,__ZN4OHOS6Parcel11WriteUint64Ey",
+    "-Wl,-u,__ZN4OHOS6Parcel15SetDataCapacityEm",
+    "-Wl,-u,__ZN4OHOS6Parcel16WriteUnpadBufferEPKvm",
+    "-Wl,-u,__ZN4OHOS6Parcel9ReadInt32Ev",
+    "-Wl,-u,__ZN4OHOS6Parcel9WriteBoolEb",
+    "-Wl,-u,__ZN4OHOS6ParcelC1Ev",
+    "-Wl,-u,__ZN4OHOS6ParcelD1Ev",
+    "-Wl,-u,__ZN4OHOS8LowerStrERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE",
+    "-Wl,-u,__ZN4OHOS8SplitStrERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEES8_RNS0_6vectorIS6_NS4_IS6_EEEEbb",
+    "-Wl,-u,__ZN4OHOS8StrToIntERKNSt3__112basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEERi",
+    "-Wl,-u,__ZNK4OHOS6Parcel11GetDataSizeEv",
+    "-Wl,-u,__ZNK4OHOS6Parcel15GetDataCapacityEv",
+    "-Wl,-u,__ZNK4OHOS6Parcel7GetDataEv",
+
+    # ColorManager symbols referenced by libace_ndk via dynamic_lookup.
+    "-Wl,-u,__ZN4OHOS12ColorManager23GetColorSpaceByJSObjectEP10napi_env__P12napi_value__",
+    "-Wl,-u,__ZN4OHOS12ColorManager24CreateJsColorSpaceObjectEP10napi_env__RNSt3__110shared_ptrINS0_10ColorSpaceEEE",
+  ]
+
+  if (ace_engine_enable_reduce_eh_frame) {
+    ldflags += [ "-Wl,-no_compact_unwind" ]
+  }
+
+  deps = [
+    "$ace_root/build:libace_static_ios",
+    "$ace_root/interfaces/inner_api/ace_kit:ace_kit",
+    "//foundation/appframework:appframework_napis",
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/menu:ace_core_components_menu_pattern_ng_ios",
+    "//plugins/interfaces/native:ace_plugin_util_inner_ios",
+  ]
+  if (defined(ark_engine)) {
+    deps += [
+      "//arkcompiler/runtime_core/libpandabase:libarkbase_static",
+      "//arkcompiler/runtime_core/libpandafile:libarkfile_static",
+    ]
+
+    if (runtime_mode != "release") {
+      deps += [
+        # for enable debugger
+        "//arkcompiler/toolchain/inspector:ark_debugger_static",
+        "//arkcompiler/toolchain/inspector:connectserver_debugger_static",
+        "//arkcompiler/toolchain/tooling:libark_ecma_debugger_set",
+      ]
+    }
+  }
+
+  deps +=
+      [ "//foundation/appframework/arkui/uicontent:ace_uicontent_interface" ]
+
+  # Link after MoltenVK so ___chkstk_darwin is resolved (static lib order matters).
+  deps += [ ":clang_rt_ios_collect" ]
+
+  cflags_cc += [
+    "-Wall",
+    "-frtti",
+  ]
+
+  exported_symbols_list = "libarkui_ios.txt"
+  part_name = "arkui-x"
+  subsystem_name = "arkui"
+
+  assert(icu_dat_name == "icudt74l",
+      "arkui_ios exports are aligned to ICU 74; update libarkui_ios.txt when ICU version changes.")
+}
+
+# NDK on-demand-load shared library (stub + impl).
+# Mirrors host arkui_ios; loaded by app Xcode project.
+# See docs/superpowers/specs/2026-07-09-ndk-target-relocation-design.md.
+ohos_shared_library("ace_ndk") {
+  include_dirs = [
+    "$ace_root",
+    "$ace_root/frameworks",
+    "$ace_root/interfaces/native",
+    "$ace_root/interfaces/inner_api/ace_kit/include",
+    "//base/global/resource_management/interfaces/inner_api/include",
+    "//foundation/graphic/graphic_2d/rosen/modules/platform/ipc_core",
+    "//foundation/multimedia/image_framework/interfaces/kits/native/include/image",
+    "//foundation/distributeddatamgr/udmf/interfaces/innerkits/common",
+    "//foundation/distributeddatamgr/udmf/interfaces/innerkits/data",
+  ]
+
+  configs = [
+    "//arkcompiler/runtime_core/static_core/plugins/ets/runtime/ani:ani_config",
+    "//foundation/arkui/napi:ace_napi_config",
+    "//foundation/graphic/graphic_2d/rosen/modules/2d_graphics/drawing_ndk:export_config",
+    "//foundation/multimedia/image_framework/interfaces/innerkits:image_external_config",
+    "//foundation/distributeddatamgr/udmf/interfaces/innerkits:udmf_client_config",
+    "//foundation/appframework/ability/ability_runtime/cross_platform/interfaces/inner_api/want:want_params_config",
+  ]
+
+  sources = [
+    "$ace_root/frameworks/core/components/xcomponent/native_interface_xcomponent_impl.cpp",
+    "$ace_root/interfaces/native/native_error_message_wrapper.cpp",
+    "$ace_root/interfaces/native/native_interface_xcomponent_cross_platform.cpp",
+    "$ace_root/interfaces/native/native_styled_string_descriptor.cpp",
+    "$ace_root/interfaces/native/event/drag_and_drop_impl.cpp",
+    "$ace_root/interfaces/native/event/key_event_impl.cpp",
+    "$ace_root/interfaces/native/event/ui_input_event.cpp",
+    "$ace_root/interfaces/native/node/node_component_snapshot.cpp",
+    "$ace_root/interfaces/native/node/native_interface_focus.cpp",
+    "$ace_root/interfaces/native/node/drawable_descriptor.cpp",
+    "$ace_root/interfaces/native/node/native_node_ani.cpp",
+    "$ace_root/interfaces/native/node/native_node_napi.cpp",
+    "$ace_root/interfaces/native/node/node_utils.cpp",
+    "$ace_root/interfaces/native/node/render_node.cpp",
+    "$ace_root/interfaces/native/node/node_adapter_impl.cpp",
+    "$ace_root/interfaces/native/node/native_node_extented.cpp",
+    "$ace_root/interfaces/native/node/node_extened.cpp",
+    "$ace_root/interfaces/native/node/gesture_impl.cpp",
+    "$ace_root/interfaces/native/node/node_model.cpp",
+    "$ace_root/interfaces/native/node/event_converter.cpp",
+    "$ace_root/interfaces/native/node/node_model_safely.cpp",
+    "$ace_root/interfaces/native/node/container_picker_option.cpp",
+    "$ace_root/interfaces/native/node/textpicker_option.cpp",
+    "$ace_root/interfaces/native/node/frame_information.cpp",
+    "$ace_root/interfaces/native/node/dialog_option.cpp",
+    "$ace_root/interfaces/native/node/dialog_model.cpp",
+    "$ace_root/interfaces/native/node/swiper_option.cpp",
+    "$ace_root/interfaces/native/node/node_transition_imp.cpp",
+    "$ace_root/interfaces/native/node/node_visual_effect.cpp",
+    "$ace_root/interfaces/native/node/grid_layout_option.cpp",
+    "$ace_root/interfaces/native/node/list_option.cpp",
+    "$ace_root/interfaces/native/node/waterflow_section_option.cpp",
+    "$ace_root/interfaces/native/native_interface_accessibility.cpp",
+    "$ace_root/interfaces/native/node/text_native_impl.cpp",
+    "$ace_root/interfaces/native/node/native_impl.cpp",
+    "$ace_root/interfaces/native/node/animate_impl.cpp",
+    "$ace_root/interfaces/native/node/node_animate.cpp",
+    "$ace_root/interfaces/native/node/style_modifier.cpp",
+    "$ace_root/interfaces/native/node/node_transition.cpp",
+    "$ace_root/interfaces/native/node/native_material_impl.cpp",
+    "$ace_root/interfaces/native/node/progress_option.cpp",
+    "$ace_root/interfaces/native/node/rich_editor_native_impl.cpp",
+    "$ace_root/interfaces/native/node/node_node_relative_container.cpp",
+    "$ace_root/frameworks/core/accessibility/native_interface_accessibility_impl.cpp",
+    "$ace_root/frameworks/core/accessibility/native_interface_accessibility_provider.cpp",
+  ]
+
+  output_name = "ace_ndk"
+  cflags_cc += [ "-Wno-missing-braces" ]
+
+  deps = [
+    "//foundation/multimedia/image_framework/interfaces/innerkits:image_native",
+    "//third_party/bounds_checking_function:libsec_static",
+  ]
+  external_deps = [
+    "c_utils:utils",
+    "napi:ace_napi",
+    "runtime_core:ani",
+  ]
+
+  exported_symbols_list = "libace_ndk.txt"
+  ldflags = [
+    "-Wl",
+    "-install_name",
+    "@rpath/libace_ndk.framework/libace_ndk",
+    "-Wl,-undefined,dynamic_lookup",
+  ]
+
+  subsystem_name = "arkui"
+  part_name = "arkui-x"
+}
+
+ohos_combine_darwin_framework("libace_ndk") {
+  deps = [ ":ace_ndk" ]
+  subsystem_name = "arkui"
+  part_name = "arkui-x"
+}
+
+# napi target
+common_napi_modules = []
+foreach(module, common_napi_libs) {
+  module_path_names = []
+  module_path_names = string_split(module, "/")
+  prefix_dir = module_path_names[0]
+
+  module_path = prefix_dir
+  if (prefix_dir != module) {
+    module_path = module_path_names[1]
+  }
+
+  module_name_ext = string_replace(module_path, "_", "")
+
+  module_name = string_replace(module, "_", "")
+  module_name = string_replace(module_name, "/", "_")
+  lib_name = "lib" + module_name
+  ohos_shared_library(module_name) {
+    ldflags = [
+      "-Wl",
+      "-install_name",
+      "@rpath/${lib_name}.framework/$lib_name",
+    ]
+    deps = [ "$ace_root/interfaces/napi/kits/${module_path}:${module_name_ext}_static_ios" ]
+    deps += [ ":arkui_ios" ]
+    exported_symbols_list = "empty_ios_symbol.txt"
+    subsystem_name = "arkui"
+    part_name = "arkui-x"
+  }
+
+  ohos_combine_darwin_framework(lib_name) {
+    deps = [ ":$module_name" ]
+
+    subsystem_name = "arkui"
+    part_name = "arkui-x"
+  }
+  common_napi_modules += [ ":${lib_name}" ]
+}
+
+# plugin target
+common_plugin_modules = []
+foreach(module, common_plugin_libs) {
+  plugin_name = module
+  target_name_ext = string_replace(module, "_", "")
+  target_name_ext = string_replace(target_name_ext, "/", "_")
+  plugin_name_ext = string_replace(plugin_name, "/", "_")
+  lib_name = "lib" + target_name_ext
+  ohos_shared_library(target_name_ext) {
+    ldflags = [
+      "-Wl",
+      "-install_name",
+      "@rpath/${lib_name}.framework/$lib_name",
+      "-Wl,-force_load," + _clang_rt_ios_force_load_path,
+    ]
+    deps = [ "//plugins/$module:${plugin_name_ext}_static_ios" ]
+    deps += [ ":arkui_ios" ]
+    deps += [ ":clang_rt_ios_collect" ]
+
+    frameworks = [
+      "AVFoundation.framework",
+      "Foundation.framework",
+      "UIKit.framework",
+      "WebKit.framework",
+    ]
+    if (module == "i18n") {
+      deps += [ ":intl" ]
+    }
+    if (module == "data/datasharepredicates") {
+      exported_symbols_list = "data_datasharepredicates.txt"
+    } else if (module == "intl") {
+      exported_symbols_list = "intl.txt"
+    } else {
+      exported_symbols_list = "empty_ios_symbol.txt"
+    }
+
+    # relative_install_dir = "module"
+    subsystem_name = "arkui"
+    part_name = "plugins"
+  }
+  ohos_combine_darwin_framework(lib_name) {
+    deps = [ ":$target_name_ext" ]
+
+    subsystem_name = "arkui"
+    part_name = "plugins"
+  }
+  common_plugin_modules += [ ":${lib_name}" ]
+}
+
+# components target
+# component_plugin_modules = []
+# foreach(module, component_plugins) {
+#   sub_name = string_replace(module, "_", "")
+#   module_name = "arkui_$sub_name"
+#   lib_name = "lib" + module_name
+#   ohos_shared_library(module_name) {
+#     ldflags = [
+#       "-Wl",
+#       "-install_name",
+#       "@rpath/${lib_name}.framework/$lib_name",
+#     ]
+#     deps = [ "$ace_root/frameworks/core/components_ng/pattern/${module}:components_plugins_${module}_source_ios" ]
+#     deps += [ ":arkui_ios" ]
+#     frameworks = [
+#       "AVFoundation.framework",
+#       "Foundation.framework",
+#       "UIKit.framework",
+#       "WebKit.framework",
+#     ]
+
+#     # relative_install_dir = "module"
+#     subsystem_name = "arkui"
+#     part_name = "arkui_components"
+#   }
+#   ohos_combine_darwin_framework(lib_name) {
+#     deps = [ ":$module_name" ]
+
+#     subsystem_name = "arkui"
+#     part_name = "arkui_components"
+#   }
+#   component_plugin_modules += [ ":${lib_name}" ]
+# }
+
+components_modules = []
+
+foreach(module, arkui_x_components) {
+  sub_name = string_replace(module, "_", "")
+  module_name = "$sub_name"
+  lib_name = "lib" + module_name
+  ohos_shared_library(module_name) {
+    ldflags = [
+      "-Wl",
+      "-install_name",
+      "@rpath/${lib_name}.framework/$lib_name",
+    ]
+    deps = [
+      "//plugins/component/${module}:arkui_x_components_${module}_source_ios",
+    ]
+    deps += [ ":arkui_ios" ]
+    exported_symbols_list = "empty_ios_symbol.txt"
+    frameworks = [
+      "AVFoundation.framework",
+      "Foundation.framework",
+      "UIKit.framework",
+      "WebKit.framework",
+    ]
+
+    # relative_install_dir = "module"
+    subsystem_name = "arkui"
+    part_name = "arkui_components"
+  }
+  ohos_combine_darwin_framework(lib_name) {
+    deps = [ ":$module_name" ]
+
+    subsystem_name = "arkui"
+    part_name = "arkui_components"
+  }
+  components_modules += [ ":${lib_name}" ]
+}
+
+# for arkui component modules
+component_modules = [
+  "dynamiclayout",
+  "image_animator",
+  "marquee",
+  "stepper",
+  "slider",
+  "gauge",
+  "checkbox",
+  "rating",
+  "waterflow",
+  "counter",
+  "linear_split",
+  "side_bar",
+  "radio",
+  "data_panel",
+  "hyperlink",
+  "patternlock",
+  "qrcode",
+  "time_picker",
+  "text_picker",
+  "date_picker",
+  "indexer",
+  "calendar_picker",
+  "symbol",
+  "rich_editor",
+  "search",
+  "sheet",
+  "text_clock",
+  "text_field",
+  "toggle",
+  "button",
+  "dialog",
+  "progress",
+  "loading_progress",
+  "badge",
+  "texttimer",
+  "span",
+  "select",
+  "navigator",
+  "tabswiper",
+  "lazy_grid_layout",
+  "refresh",
+  "grid",
+  "panel",
+  "bubble",
+]
+component_modules_libs = []
+
+foreach(module, component_modules) {
+  sub_name = string_replace(module, "_", "")
+  module_name = "arkui_$sub_name"
+  module_path = module
+  if (module == "span") {
+    module_path = "text/span"
+  }
+  lib_name = "lib" + module_name
+  ohos_shared_library(module_name) {
+    ldflags = [
+      "-Wl",
+      "-install_name",
+      "@rpath/${lib_name}.framework/$lib_name",
+    ]
+    deps = [ "$ace_root/frameworks/core/components_ng/pattern/${module_path}:ace_core_components_${module}_pattern_ng_ios" ]
+    deps += [ libace_target ]
+
+    part_name = ace_engine_part
+    subsystem_name = ace_engine_subsystem
+  }
+
+  ohos_combine_darwin_framework(lib_name) {
+    deps = [ ":$module_name" ]
+
+    subsystem_name = ace_engine_subsystem
+    part_name = ace_engine_part
+  }
+  component_modules_libs += [ ":${lib_name}" ]
+}
+
+# Install packages
+group("ace_packages") {
+  deps = [
+    ":libace_ndk",
+    ":libarkui_ios",
+  ]
+  deps += common_napi_modules
+  deps += common_plugin_modules
+  deps += components_modules
+  if (defined(use_components_lib) && use_components_lib) {
+    deps += component_plugin_modules
+  }
+  deps += component_modules_libs
+}

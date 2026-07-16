@@ -1,0 +1,61 @@
+/*
+ * Copyright (c) 2024 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "frameworks/core/interfaces/native/node/touch_event_convertor.h"
+#include "adapter/ios/entrance/mmi_event_convertor.h"
+
+namespace OHOS::Ace::NG {
+TouchEvent ConvertToTouchEvent(const std::shared_ptr<MMI::PointerEvent>& srcPointerEvent)
+{
+    return Platform::ConvertTouchEvent(srcPointerEvent);
+}
+
+void ConvertToMouseEvent(MouseEvent& mouseEvent, const std::shared_ptr<MMI::PointerEvent>& srcPointerEvent) {}
+
+void ConvertToAxisEvent(AxisEvent& event, const std::shared_ptr<MMI::PointerEvent>& srcPointerEvent) {}
+
+void SetClonedPointerEvent(const MMI::PointerEvent* pointerEvent, ArkUITouchEvent* arkUITouchEventCloned) {}
+
+void SetClonedMousePointerEvent(const MMI::PointerEvent* pointerEvent, ArkUIMouseEvent* arkUIMouseEventCloned) {}
+
+void SetClonedAxisPointerEvent(const MMI::PointerEvent* pointerEvent, ArkUIAxisEvent* arkUIAxisEventCloned) {}
+
+void SetPostPointerEvent(TouchEvent& touchEvent, ArkUITouchEvent* arkUITouchEventCloned) {}
+
+void SetPostMousePointerEvent(MouseEvent& mouseEvent, ArkUIMouseEvent* arkUIMouseEventCloned) {}
+
+void SetPostAxisPointerEvent(AxisEvent& axisEvent, ArkUIAxisEvent* arkUIAxisEventCloned) {}
+
+void DestroyRawPointerEvent(ArkUITouchEvent* arkUITouchEvent) {}
+
+void DestroyMouseRawPointerEvent(ArkUIMouseEvent* arkUIMouseEvent) {}
+
+void DestroyAxisRawPointerEvent(ArkUIAxisEvent* arkUIAxisEvent) {}
+
+TouchType GetTouchEventType(const std::shared_ptr<MMI::PointerEvent>& pointerEvent)
+{
+    return TouchType::UNKNOWN;
+}
+
+AxisAction GetAxisEventType(const std::shared_ptr<MMI::PointerEvent>& pointerEvent)
+{
+    return AxisAction::NONE;
+}
+
+MouseAction GetMouseEventType(const std::shared_ptr<MMI::PointerEvent>& pointerEvent)
+{
+    return MouseAction::NONE;
+}
+}

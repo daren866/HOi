@@ -1,0 +1,716 @@
+/*
+ * Copyright (c) 2025-2026 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "AceWebCallbackObjectWrapper.h"
+#include "core/components_ng/pattern/web/web_object_event.h"
+#include "AceWebErrorReceiveInfoObject.h"
+#include "AceWebObject.h"
+#include <stdio.h>
+#include <string.h>
+#include <mutex>
+#include <unordered_map>
+
+#include "AceWebControllerBridge.h"
+
+class AceWebResourceObjectWrapper final : public OHOS::Ace::WebResourceRequestObject {
+public:
+    std::map<std::string, std::string> GetRequestHeader(void *object);
+    std::string GetRequestUrl(void *object);
+    std::string GetMethod(void *object);
+    bool IsRequestGesture(void *object);
+    bool IsMainFrame(void *object);
+    bool IsRedirect(void *object);
+};
+
+std::map<std::string, std::string> AceWebResourceObjectWrapper::GetRequestHeader(void *object)
+{
+    return std::map<std::string, std::string>();
+}
+
+std::string AceWebResourceObjectWrapper::GetRequestUrl(void *object)
+{
+    AceWebErrorReceiveInfoObject* acePtr = reinterpret_cast<AceWebErrorReceiveInfoObject*>(object);
+    auto requestURL = acePtr ? acePtr->GetRequestUrl() : "";
+    if (strcmp(requestURL.c_str(), "") != 0) {
+        return requestURL;
+    } else {
+        AceWebHttpErrorReceiveObject* aceHttpPtr = reinterpret_cast<AceWebHttpErrorReceiveObject*>(object);
+        return aceHttpPtr ? aceHttpPtr->GetRequestUrl() : "";
+    }
+}
+
+std::string AceWebResourceObjectWrapper::GetMethod(void *object)
+{
+    return "GET";
+}
+
+bool AceWebResourceObjectWrapper::IsRequestGesture(void *object)
+{
+    return true;
+}
+
+bool AceWebResourceObjectWrapper::IsMainFrame(void *object)
+{
+    return true;
+}
+
+bool AceWebResourceObjectWrapper::IsRedirect(void *object)
+{
+    return false;
+}
+
+class AceWebResourceErrorObject final : public OHOS::Ace::WebResourceErrorObject{
+public:
+    std::string GetErrorInfo(void *object);
+    int GetErrorCode(void *object);
+};
+
+std::string AceWebResourceErrorObject::GetErrorInfo(void *object)
+{
+    AceWebErrorReceiveInfoObject* acePtr = reinterpret_cast<AceWebErrorReceiveInfoObject*>(object);
+    return acePtr ? acePtr->GetErrorInfo() : "";
+}
+
+int AceWebResourceErrorObject::GetErrorCode(void *object)
+{
+    AceWebErrorReceiveInfoObject* acePtr = reinterpret_cast<AceWebErrorReceiveInfoObject*>(object);
+    return acePtr ? acePtr->GetErrorCode() : 0;
+}
+
+class AceWebScrollObjectWrapper final : public OHOS::Ace::WebScrollObject {
+public:
+    float GetX(void* object);
+    float GetY(void* object);
+    float GetContentWidth(void* object);
+    float GetContentHeight(void* object);
+    float GetFrameWidth(void* object);
+    float GetFrameHeight(void* object);
+};
+
+float AceWebScrollObjectWrapper::GetX(void* object)
+{
+    AceWebOnScrollObject* acePtr = reinterpret_cast<AceWebOnScrollObject*>(object);
+    return acePtr ? acePtr->GetX() : 0.f;
+}
+
+float AceWebScrollObjectWrapper::GetY(void* object)
+{
+    AceWebOnScrollObject* acePtr = reinterpret_cast<AceWebOnScrollObject*>(object);
+    return acePtr ? acePtr->GetY() : 0.f;
+}
+
+float AceWebScrollObjectWrapper::GetContentWidth(void* object)
+{
+    AceWebOnScrollObject* acePtr = static_cast<AceWebOnScrollObject*>(object);
+    float contentWidth = acePtr ? acePtr->GetContentWidth() : 0.f;
+    return contentWidth;
+}
+
+float AceWebScrollObjectWrapper::GetContentHeight(void* object)
+{
+    AceWebOnScrollObject* acePtr = static_cast<AceWebOnScrollObject*>(object);
+    float contentHeight = acePtr ? acePtr->GetContentHeight() : 0.f;
+    return contentHeight;
+}
+
+float AceWebScrollObjectWrapper::GetFrameWidth(void* object)
+{
+    AceWebOnScrollObject* acePtr = static_cast<AceWebOnScrollObject*>(object);
+    float frameWidth = acePtr ? acePtr->GetFrameWidth() : 0.f;
+    return frameWidth;
+}
+
+float AceWebScrollObjectWrapper::GetFrameHeight(void* object)
+{
+    AceWebOnScrollObject* acePtr = static_cast<AceWebOnScrollObject*>(object);
+    float frameHeight = acePtr ? acePtr->GetFrameHeight() : 0.f;
+    return frameHeight;
+}
+
+
+class AceWebScaleChangeObjectWrapper final : public OHOS::Ace::WebScaleChangeObject {
+public:
+    float GetNewScale(void* object);
+    float GetOldScale(void* object);
+};
+
+float AceWebScaleChangeObjectWrapper::GetNewScale(void* object)
+{
+    AceWebOnScaleChangeObject* acePtr = reinterpret_cast<AceWebOnScaleChangeObject*>(object);
+    return acePtr ? acePtr->GetNewScale() : 0.f;
+}
+
+float AceWebScaleChangeObjectWrapper::GetOldScale(void* object)
+{
+    AceWebOnScaleChangeObject* acePtr = reinterpret_cast<AceWebOnScaleChangeObject*>(object);
+    return acePtr ? acePtr->GetOldScale() : 0.f;
+}
+
+class AceWebConsoleMessageObjectWrapper final : public OHOS::Ace::WebConsoleMessageObject {
+public:
+    std::string GetMessage(void* object);
+    int GetMessageLevel(void* object);
+    int GetLineNumber(void* object);
+    std::string GetSourceId(void* object);
+};
+
+std::string AceWebConsoleMessageObjectWrapper::GetMessage(void* object)
+{
+    AceWebOnConsoleObject* acePtr = reinterpret_cast<AceWebOnConsoleObject*>(object);
+    return acePtr ? acePtr->GetMessage() : "";
+}
+
+int AceWebConsoleMessageObjectWrapper::GetMessageLevel(void* object)
+{
+    AceWebOnConsoleObject* acePtr = reinterpret_cast<AceWebOnConsoleObject*>(object);
+    return acePtr ? acePtr->GetMessageLevel() : 0;
+}
+
+int AceWebConsoleMessageObjectWrapper::GetLineNumber(void* object)
+{
+    return 0;
+}
+
+std::string AceWebConsoleMessageObjectWrapper::GetSourceId(void* object)
+{
+    return "SourceId";
+}
+
+class AceWebResourceResponseObjectWrapper final : public OHOS::Ace::WebResourceResponseObject {
+public:
+    std::map<std::string, std::string> GetResponseHeader(void* object);
+    std::string GetMimeType(void* object);
+    std::string GetEncoding(void* object);
+    std::string GetResponseData(void* object);
+    std::string GetReason(void* object);
+    int GetStatusCode(void* object);
+};
+
+std::map<std::string, std::string> AceWebResourceResponseObjectWrapper::GetResponseHeader(void* object)
+{
+    return std::map<std::string, std::string>();
+}
+
+std::string AceWebResourceResponseObjectWrapper::GetMimeType(void* object)
+{
+    AceWebHttpErrorReceiveObject* acePtr = reinterpret_cast<AceWebHttpErrorReceiveObject*>(object);
+    return acePtr ? acePtr->GetMimeType() : "";
+}
+
+std::string AceWebResourceResponseObjectWrapper::GetEncoding(void* object)
+{
+    AceWebHttpErrorReceiveObject* acePtr = reinterpret_cast<AceWebHttpErrorReceiveObject*>(object);
+    return acePtr ? acePtr->GetEncoding() : "";
+}
+
+std::string AceWebResourceResponseObjectWrapper::GetResponseData(void* object)
+{
+    return "ResponseData";
+}
+
+std::string AceWebResourceResponseObjectWrapper::GetReason(void* object)
+{
+    return "ResponseReason";
+}
+
+int AceWebResourceResponseObjectWrapper::GetStatusCode(void* object)
+{
+    AceWebHttpErrorReceiveObject* acePtr = reinterpret_cast<AceWebHttpErrorReceiveObject*>(object);
+    return acePtr ? acePtr->GetStatusCode() : 0;
+}
+
+class AceWebDialogObjectWrapper final : public OHOS::Ace::WebCommonDialogObject {
+public:
+    std::string GetUrl(void* object);
+    std::string GetMessage(void* object);
+    std::string GetValue(void* object);
+    void Confirm(void* object, const std::string& promptResult, int index);
+    void Confirm(void* object, int index);
+    void Cancel(void* object, int index);
+};
+
+std::string AceWebDialogObjectWrapper::GetUrl(void* object)
+{
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    return acePtr ? acePtr->GetUrl() : "";
+}
+
+std::string AceWebDialogObjectWrapper::GetMessage(void* object)
+{
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    return acePtr ? acePtr->GetMessage() : "";
+}
+
+std::string AceWebDialogObjectWrapper::GetValue(void* object)
+{
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    return acePtr ? acePtr->GetValue() : "";
+}
+
+void AceWebDialogObjectWrapper::Confirm(void* object, const std::string& promptResult, int index)
+{
+    DialogResultCallBack callback;
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    callback = acePtr ? acePtr->GetDialogResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::PROMPTCONFIRM), promptResult);
+    }
+}
+
+void AceWebDialogObjectWrapper::Confirm(void* object, int index)
+{
+    DialogResultCallBack callback;
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    callback = acePtr ? acePtr->GetDialogResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CONFIRM), "");
+    }
+}
+
+void AceWebDialogObjectWrapper::Cancel(void* object, int index)
+{
+    DialogResultCallBack callback;
+    AceWebDialogObject* acePtr = reinterpret_cast<AceWebDialogObject*>(object);
+    callback = acePtr ? acePtr->GetDialogResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CANCEL), "");
+    }
+}
+
+class AceWebRefreshAccessedHistoryObjectWrapper final : public OHOS::Ace::WebRefreshAccessedHistoryObject {
+public:
+    std::string GetUrl(void* object);
+    bool GetIsRefreshed(void* object);
+};
+
+std::string AceWebRefreshAccessedHistoryObjectWrapper::GetUrl(void* object)
+{
+    AceWebRefreshAccessedHistoryObject* acePtr = reinterpret_cast<AceWebRefreshAccessedHistoryObject*>(object);
+    return acePtr ? acePtr->GetUrl() : "";
+}
+
+bool AceWebRefreshAccessedHistoryObjectWrapper::GetIsRefreshed(void* object)
+{
+    AceWebRefreshAccessedHistoryObject* acePtr = reinterpret_cast<AceWebRefreshAccessedHistoryObject*>(object);
+    return acePtr ? acePtr->GetIsRefreshed() : false;
+}
+
+class AceWebFullScreenExitObjectWrapper final : public OHOS::Ace::WebFullScreenExitObject {
+    public:
+};
+
+class AceWebPermissionRequestObjectWrapper final : public OHOS::Ace::WebPermissionRequestObject {
+public:
+    std::string GetOrigin(void* object);
+    int GetResourcesId(void* object);
+    void Grant(void* object, const int resourcesId, int index);
+    void Deny(void* object, int index);
+};
+
+std::string AceWebPermissionRequestObjectWrapper::GetOrigin(void* object)
+{
+    AceWebPermissionRequestObject* acePtr = reinterpret_cast<AceWebPermissionRequestObject*>(object);
+    return acePtr ? acePtr->GetOrigin() : "";
+}
+
+int AceWebPermissionRequestObjectWrapper::GetResourcesId(void* object)
+{
+    AceWebPermissionRequestObject* acePtr = reinterpret_cast<AceWebPermissionRequestObject*>(object);
+    return acePtr ? acePtr->GetResourcesId() : 0;
+}
+
+void AceWebPermissionRequestObjectWrapper::Grant(void* object, const int resourcesId, int index)
+{
+    PermissionResultCallback callback;
+    AceWebPermissionRequestObject* acePtr = reinterpret_cast<AceWebPermissionRequestObject*>(object);
+    callback = acePtr ? acePtr->GetPermissionResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::GRANT), resourcesId);
+    }
+}
+
+void AceWebPermissionRequestObjectWrapper::Deny(void* object, int index)
+{
+    PermissionResultCallback callback;
+    AceWebPermissionRequestObject* acePtr = reinterpret_cast<AceWebPermissionRequestObject*>(object);
+    callback = acePtr ? acePtr->GetPermissionResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::DENY), 0);
+    }
+}
+
+class AceWebHttpAuthRequestObjectWrapper final : public OHOS::Ace::WebHttpAuthRequestObject {
+public:
+    std::string GetHost(void* object);
+    std::string GetRealm(void* object);
+    bool Confirm(void* object, std::string& userName, std::string& pwd, int index);
+    bool IsHttpAuthInfoSaved(void* object, int index);
+    void Cancel(void* object, int index);
+};
+
+std::string AceWebHttpAuthRequestObjectWrapper::GetHost(void* object)
+{
+    AceWebOnHttpAuthRequestObject* acePtr = reinterpret_cast<AceWebOnHttpAuthRequestObject*>(object);
+    return acePtr ? acePtr->GetHost() : "";
+}
+
+std::string AceWebHttpAuthRequestObjectWrapper::GetRealm(void* object)
+{
+    AceWebOnHttpAuthRequestObject* acePtr = reinterpret_cast<AceWebOnHttpAuthRequestObject*>(object);
+    return acePtr ? acePtr->GetRealm() : "";
+}
+
+bool AceWebHttpAuthRequestObjectWrapper::Confirm(void* object, std::string& userName, std::string& pwd, int index)
+{
+    AuthResultCallback callback;
+    AceWebOnHttpAuthRequestObject* acePtr = reinterpret_cast<AceWebOnHttpAuthRequestObject*>(object);
+    callback = acePtr ? acePtr->GetAuthResultCallback() : callback;
+    if (callback) {
+        return callback(static_cast<int>(AceWebHandleResult::CONFIRM), userName, pwd);
+    }
+    return false;
+}
+
+bool AceWebHttpAuthRequestObjectWrapper::IsHttpAuthInfoSaved(void* object, int index)
+{
+    AuthResultCallback callback;
+    AceWebOnHttpAuthRequestObject* acePtr = reinterpret_cast<AceWebOnHttpAuthRequestObject*>(object);
+    callback = acePtr ? acePtr->GetAuthResultCallback() : callback;
+    if (callback) {
+        return callback(static_cast<int>(AceWebHandleResult::HTTPAUTHINFOSAVED), "", "");
+    }
+    return false;
+}
+
+void AceWebHttpAuthRequestObjectWrapper::Cancel(void* object, int index)
+{
+    AuthResultCallback callback;
+    AceWebOnHttpAuthRequestObject* acePtr = reinterpret_cast<AceWebOnHttpAuthRequestObject*>(object);
+    callback = acePtr ? acePtr->GetAuthResultCallback() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CANCEL), "", "");
+    }
+}
+
+class AceWebDownloadResponseObjectWrapper final : public OHOS::Ace::WebDownloadResponseObject {
+public:
+    std::string GetUrl(void* object);
+    std::string GetMimetype(void* object);
+    long GetContentLength(void* object);
+    std::string GetContentDisposition(void* object);
+    std::string GetUserAgent(void* object);
+};
+
+std::string AceWebDownloadResponseObjectWrapper::GetUrl(void* object)
+{
+    AceWebDownloadResponseObject* acePtr = reinterpret_cast<AceWebDownloadResponseObject*>(object);
+    return acePtr ? acePtr->GetUrl() : "";
+}
+
+std::string AceWebDownloadResponseObjectWrapper::GetMimetype(void* object)
+{
+    AceWebDownloadResponseObject* acePtr = reinterpret_cast<AceWebDownloadResponseObject*>(object);
+    return acePtr ? acePtr->GetMimetype() : "";
+}
+
+long AceWebDownloadResponseObjectWrapper::GetContentLength(void* object)
+{
+    AceWebDownloadResponseObject* acePtr = reinterpret_cast<AceWebDownloadResponseObject*>(object);
+    return acePtr ? acePtr->GetContentLength() : 0;
+}
+
+std::string AceWebDownloadResponseObjectWrapper::GetContentDisposition(void* object)
+{
+    return "contentDisposition";
+}
+
+std::string AceWebDownloadResponseObjectWrapper::GetUserAgent(void* object)
+{
+    AceWebDownloadResponseObject* acePtr = reinterpret_cast<AceWebDownloadResponseObject*>(object);
+    return acePtr ? acePtr->GetUserAgent() : "";
+}
+
+class AceWebFullScreenEnterObjectWrapper final : public OHOS::Ace::WebFullScreenEnterObject {
+public:
+    int GetWidths(void* object);
+    int GetHeights(void* object);
+    void ExitFullScreen(void* object, int index);
+};
+
+int AceWebFullScreenEnterObjectWrapper::GetWidths(void* object)
+{
+    AceWebFullScreenEnterObject* acePtr = reinterpret_cast<AceWebFullScreenEnterObject*>(object);
+    return acePtr ? acePtr->GetWidths() : 0;
+}
+
+int AceWebFullScreenEnterObjectWrapper::GetHeights(void* object)
+{
+    AceWebFullScreenEnterObject* acePtr = reinterpret_cast<AceWebFullScreenEnterObject*>(object);
+    return acePtr ? acePtr->GetHeights() : 0;
+}
+
+void AceWebFullScreenEnterObjectWrapper::ExitFullScreen(void* object, int index)
+{
+    FullEnterRequestExitCallBack callback;
+    AceWebFullScreenEnterObject* acePtr = reinterpret_cast<AceWebFullScreenEnterObject*>(object);
+    callback = acePtr ? acePtr->GetFullEnterRequestExitCallback() : callback;
+    if (callback) {
+        callback();
+    }
+}
+
+class AceWebWindowNewObjectWrapper final : public OHOS::Ace::WebWindowNewObject {
+public:
+    bool IsAlert(void* object) override;
+    bool IsUserTrigger(void* object) override;
+    std::string GetTargetUrl(void* object) override;
+    int AddObject(void* object) override;
+    void DelObject(int index) override;
+    void CompleteWithChildWeb(int index, int32_t childWebId) override;
+    void CancelPopup(int index) override;
+
+private:
+    std::shared_ptr<AceWebWindowNewObject> GetObject(int index);
+
+    int index_ = 0;
+    std::unordered_map<int, std::shared_ptr<AceWebWindowNewObject>> objectMap_;
+    std::mutex mutex_;
+};
+
+bool AceWebWindowNewObjectWrapper::IsAlert(void* object)
+{
+    AceWebWindowNewObject* acePtr = reinterpret_cast<AceWebWindowNewObject*>(object);
+    if (acePtr != nullptr) {
+        return acePtr->IsAlert();
+    }
+    return false;
+}
+
+bool AceWebWindowNewObjectWrapper::IsUserTrigger(void* object)
+{
+    AceWebWindowNewObject* acePtr = reinterpret_cast<AceWebWindowNewObject*>(object);
+    if (acePtr != nullptr) {
+        return acePtr->IsUserTrigger();
+    }
+    return false;
+}
+
+std::string AceWebWindowNewObjectWrapper::GetTargetUrl(void* object)
+{
+    AceWebWindowNewObject* acePtr = reinterpret_cast<AceWebWindowNewObject*>(object);
+    if (acePtr != nullptr) {
+        return acePtr->GetTargetUrl();
+    }
+    return "";
+}
+
+int AceWebWindowNewObjectWrapper::AddObject(void* object)
+{
+    auto* aceObject = reinterpret_cast<AceWebWindowNewObject*>(object);
+    if (aceObject == nullptr) {
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    objectMap_[++index_] = aceObject->shared_from_this();
+    return index_;
+}
+
+void AceWebWindowNewObjectWrapper::DelObject(int index)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    objectMap_.erase(index);
+}
+
+void AceWebWindowNewObjectWrapper::CompleteWithChildWeb(int index, int32_t childWebId)
+{
+    auto object = GetObject(index);
+    if (object == nullptr) {
+        return;
+    }
+    object->CompleteWithChildWeb(childWebId);
+    loadUrlOC(childWebId, GetTargetUrl(object.get()), std::map<std::string, std::string>());
+}
+
+void AceWebWindowNewObjectWrapper::CancelPopup(int index)
+{
+    auto object = GetObject(index);
+    if (object == nullptr) {
+        return;
+    }
+    object->CancelPopup();
+}
+
+std::shared_ptr<AceWebWindowNewObject> AceWebWindowNewObjectWrapper::GetObject(int index)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto iter = objectMap_.find(index);
+    if (iter == objectMap_.end()) {
+        return nullptr;
+    }
+    return iter->second;
+}
+
+class AceWebSslErrorEventObjectWrapper final : public OHOS::Ace::WebSslErrorEventObject {
+public:
+    int GetError(void* object);
+    std::string GetUrl(void* object);
+    std::string GetOriginalUrl(void* object);
+    std::string GetReferrer(void* object);
+    bool IsFatalError(void* object);
+    bool IsMainFrame(void* object);
+    std::vector<std::string> GetCertificateChain(void* object);
+    void Confirm(void* object, int index);
+    void Cancel(void* object, bool abortLoading, int index);
+};
+
+int AceWebSslErrorEventObjectWrapper::GetError(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->GetError() : -1;
+}
+
+std::string AceWebSslErrorEventObjectWrapper::GetUrl(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->GetUrl() : "";
+}
+
+std::string AceWebSslErrorEventObjectWrapper::GetOriginalUrl(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->GetOriginalUrl() : "";
+}
+
+std::string AceWebSslErrorEventObjectWrapper::GetReferrer(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->GetReferrer() : "";
+}
+
+bool AceWebSslErrorEventObjectWrapper::IsFatalError(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->IsFatalError() : false;
+}
+
+std::vector<std::string> AceWebSslErrorEventObjectWrapper::GetCertificateChain(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->GetCertificateChain() : std::vector<std::string>();
+}
+
+bool AceWebSslErrorEventObjectWrapper::IsMainFrame(void* object)
+{
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    return acePtr ? acePtr->IsMainFrame() : false;
+}
+
+void AceWebSslErrorEventObjectWrapper::Confirm(void* object, int index)
+{
+    SslEventCallBack callback;
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    callback = acePtr ? acePtr->GetSslErrorEventConfirmCallBack() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CONFIRM));
+    }
+}
+
+void AceWebSslErrorEventObjectWrapper::Cancel(void* object, bool abortLoading, int index)
+{
+    SslErrorEventCancelCallBack callback;
+    AceWebSslErrorEventObject* acePtr = reinterpret_cast<AceWebSslErrorEventObject*>(object);
+    callback = acePtr ? acePtr->GetSslErrorEventCancelCallBack() : callback;
+    if (callback) {
+        callback(abortLoading);
+    }
+}
+
+class AceWebOnSslErrorEventReceiveEventObjectWrapper final : public OHOS::Ace::WebOnSslErrorEventReceiveEventObject {
+public:
+    int GetError(void* object);
+    std::vector<std::string> GetCertChainData(void* object);
+    void Confirm(void* object, int index);
+    void Cancel(void* object, int index);
+};
+
+int AceWebOnSslErrorEventReceiveEventObjectWrapper::GetError(void* object)
+{
+    AceWebOnSslErrorEventReceiveEventObject* acePtr = reinterpret_cast<AceWebOnSslErrorEventReceiveEventObject*>(object);
+    return acePtr ? acePtr->GetError() : -1;
+}
+
+std::vector<std::string> AceWebOnSslErrorEventReceiveEventObjectWrapper::GetCertChainData(void* object) {
+    AceWebOnSslErrorEventReceiveEventObject* acePtr = reinterpret_cast<AceWebOnSslErrorEventReceiveEventObject*>(object);
+    return acePtr ? acePtr->GetCertChainData() : std::vector<std::string>();
+}
+
+void AceWebOnSslErrorEventReceiveEventObjectWrapper::Confirm(void* object, int index)
+{
+    SslEventCallBack callback;
+    AceWebOnSslErrorEventReceiveEventObject* acePtr = reinterpret_cast<AceWebOnSslErrorEventReceiveEventObject*>(object);
+    callback = acePtr ? acePtr->GetWebOnSslErrorEventReceiveCallBack() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CONFIRM));
+    }
+}
+
+void AceWebOnSslErrorEventReceiveEventObjectWrapper::Cancel(void* object, int index)
+{
+    SslEventCallBack callback;
+    AceWebOnSslErrorEventReceiveEventObject* acePtr = reinterpret_cast<AceWebOnSslErrorEventReceiveEventObject*>(object);
+    callback = acePtr ? acePtr->GetWebOnSslErrorEventReceiveCallBack() : callback;
+    if (callback) {
+        callback(static_cast<int>(AceWebHandleResult::CANCEL));
+    }
+}
+
+void InjectAceWebResourceObject()
+{
+    auto aceWebResourceObjectWrapper = OHOS::Ace::Referenced::MakeRefPtr<AceWebResourceObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetResourceRequestObject(aceWebResourceObjectWrapper);
+    auto aceWebResourceErrorObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebResourceErrorObject>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetResourceErrorObject(aceWebResourceErrorObject);
+    auto aceWebOnScrollObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebScrollObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetScrollObject(aceWebOnScrollObject);
+    auto aceWebOnScaleChangeObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebScaleChangeObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetScaleChangeObject(aceWebOnScaleChangeObject);
+    auto aceWebOnConsoleObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebConsoleMessageObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetConsoleMessageObject(aceWebOnConsoleObject);
+    auto aceWebResourceResponseObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebResourceResponseObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetResourceResponseObject(aceWebResourceResponseObject);
+    auto aceCommonDialogObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebDialogObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetCommonDialogObject(aceCommonDialogObject);
+    auto acePermissionRequestObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebPermissionRequestObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetPermissionRequestObject(acePermissionRequestObject);
+    auto aceWebHttpAuthRequestObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebHttpAuthRequestObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetHttpAuthRequestObject(aceWebHttpAuthRequestObject);
+    auto aceWebDownloadResponseObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebDownloadResponseObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetDownloadResponseObject(aceWebDownloadResponseObject);
+    auto aceWebRefreshAccessedHistoryObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebRefreshAccessedHistoryObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetRefreshAccessedHistoryObject(aceWebRefreshAccessedHistoryObject);
+    auto aceWebFullScreenEnterObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebFullScreenEnterObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetFullScreenEnterObject(aceWebFullScreenEnterObject);
+    auto aceWebFullScreenExitObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebFullScreenExitObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetFullScreenExitObject(aceWebFullScreenExitObject);
+    auto aceWebWindowNewObject = OHOS::Ace::WebObjectEventManager::GetInstance().GetWindowNewObject();
+    if (aceWebWindowNewObject == nullptr) {
+        aceWebWindowNewObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebWindowNewObjectWrapper>();
+        OHOS::Ace::WebObjectEventManager::GetInstance().SetWindowNewObject(aceWebWindowNewObject);
+    }
+    auto aceWebSslErrorEventObject = OHOS::Ace::Referenced::MakeRefPtr<AceWebSslErrorEventObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetSslErrorEventObject(aceWebSslErrorEventObject);
+    auto aceWebOnSslErrorEventReceiveEventObject= OHOS::Ace::Referenced::MakeRefPtr<AceWebOnSslErrorEventReceiveEventObjectWrapper>();
+    OHOS::Ace::WebObjectEventManager::GetInstance().SetOnSslErrorEventReceiveEventObject(aceWebOnSslErrorEventReceiveEventObject);
+}
