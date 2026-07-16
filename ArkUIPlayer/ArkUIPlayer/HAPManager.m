@@ -40,9 +40,6 @@ static HAPManager *_sharedInstance = nil;
     if (self.isInitialized) {
         return;
     }
-    
-    [StageApplication configModuleWithBundleDirectory:@"arkui-x"];
-    [StageApplication launchApplication];
     self.isInitialized = YES;
 }
 
@@ -124,11 +121,11 @@ static HAPManager *_sharedInstance = nil;
                 if (jsonData) {
                     NSDictionary *jsonDict = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
                     if (jsonDict) {
-                        if (jsonDict[@"module" ][@"name"]) {
-                            appName = jsonDict[@"module" ][@"name"];
+                        if (jsonDict[@"module"][@"name"]) {
+                            appName = jsonDict[@"module"][@"name"];
                         }
-                        if (jsonDict[@"module" ][@"bundleName"]) {
-                            bundleName = jsonDict[@"module" ][@"bundleName"];
+                        if (jsonDict[@"module"][@"bundleName"]) {
+                            bundleName = jsonDict[@"module"][@"bundleName"];
                         }
                     }
                 }
@@ -184,11 +181,11 @@ static HAPManager *_sharedInstance = nil;
                         if (jsonData) {
                             NSDictionary *jsonDict = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
                             if (jsonDict) {
-                                if (jsonDict[@"module" ][@"name"]) {
-                                    appName = jsonDict[@"module" ][@"name"];
+                                if (jsonDict[@"module"][@"name"]) {
+                                    appName = jsonDict[@"module"][@"name"];
                                 }
-                                if (jsonDict[@"module" ][@"bundleName"]) {
-                                    bundleName = jsonDict[@"module" ][@"bundleName"];
+                                if (jsonDict[@"module"][@"bundleName"]) {
+                                    bundleName = jsonDict[@"module"][@"bundleName"];
                                 }
                             }
                         }
@@ -306,11 +303,9 @@ static HAPManager *_sharedInstance = nil;
 }
 
 - (void)callCurrentAbilityOnForeground {
-    [StageApplication callCurrentAbilityOnForeground];
 }
 
 - (void)callCurrentAbilityOnBackground {
-    [StageApplication callCurrentAbilityOnBackground];
 }
 
 - (void)unloadCurrentHAP {
