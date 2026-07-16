@@ -7,36 +7,36 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		13B07FAF1A680F5B00A75B9A /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FAE1A680F5B00A75B9A /* AppDelegate.m */; };
-		13B07FB11A680F5B00A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A680F5B00A75B9A /* main.m */; };
-		13B07FB31A680F5B00A75B9A /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB21A680F5B00A75B9A /* Main.storyboard */; };
-		13B07FB51A680F5B00A75B9A /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB41A680F5B00A75B9A /* LaunchScreen.storyboard */; };
-		13B07FB71A680F5B00A75B9A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB61A680F5B00A75B9A /* Assets.xcassets */; };
-		13B07FB91A680F5B00A75B9A /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A680F5B00A75B9A /* Info.plist */; };
-		8205D9F3202538A1006686DC /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 8205D9F2202538A1006686DC /* HAPManager.m */; };
-		8205D9F5202538A1006686DC /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 8205D9F4202538A1006686DC /* HAPViewController.m */; };
-		8205D9F7202538A1006686DC /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 8205D9F6202538A1006686DC /* HAPPlayerViewController.m */; };
+		930E5AB729BC0D0A00D9E8BA /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */; };
+		930E5AB929BC0D0A00D9E8BA /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AB829BC0D0A00D9E8BA /* main.m */; };
+		930E5ABB29BC0D0A00D9E8BA /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */; };
+		930E5ABD29BC0D0A00D9E8BA /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */; };
+		930E5ABF29BC0D0A00D9E8BA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */; };
+		930E5AC129BC0D0A00D9E8BA /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 930E5AC029BC0D0A00D9E8BA /* Info.plist */; };
+		930E5AC329BC0D0A00D9E8BA /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC229BC0D0A00D9E8BA /* HAPManager.m */; };
+		930E5AC529BC0D0A00D9E8BA /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */; };
+		930E5AC729BC0D0A00D9E8BA /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07FAB1A680F5B00A75B9A /* ArkUIPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArkUIPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FAE1A680F5B00A75B9A /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
-		13B07FAF1A680F5B00A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
-		13B07FB01A680F5B00A75B9A /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		13B07FB21A680F5B00A75B9A /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
-		13B07FB41A680F5B00A75B9A /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		13B07FB61A680F5B00A75B9A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		13B07FB81A680F5B00A75B9A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		8205D9F1202538A1006686DC /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
-		8205D9F2202538A1006686DC /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPManager.m; sourceTree = "<group>"; };
-		8205D9F3202538A1006686DC /* HAPViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPViewController.h; sourceTree = "<group>"; };
-		8205D9F4202538A1006686DC /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
-		8205D9F5202538A1006686DC /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
-		8205D9F6202538A1006686DC /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
+		930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArkUIPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		930E5AB529BC0D0A00D9E8BA /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		930E5AB829BC0D0A00D9E8BA /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
+		930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		930E5AC029BC0D0A00D9E8BA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		930E5AC129BC0D0A00D9E8BA /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
+		930E5AC229BC0D0A00D9E8BA /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPManager.m; sourceTree = "<group>"; };
+		930E5AC329BC0D0A00D9E8BA /* HAPViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPViewController.h; sourceTree = "<group>"; };
+		930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
+		930E5AC529BC0D0A00D9E8BA /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
+		930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		13B07FAA1A680F5B00A75B9A /* Frameworks */ = {
+		930E5AAE29BC0D0A00D9E8BA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,44 +46,44 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		13B07FA01A680F5B00A75B9A = {
+		930E5AA029BC0D0A00D9E8BA = {
 			isa = PBXGroup;
 			children = (
-				13B07FAF1A680F5B00A75B9A /* AppDelegate.h */,
-				13B07FAE1A680F5B00A75B9A /* AppDelegate.m */,
-				13B07FB01A680F5B00A75B9A /* main.m */,
-				8205D9F1202538A1006686DC /* HAPManager.h */,
-				8205D9F2202538A1006686DC /* HAPManager.m */,
-				8205D9F3202538A1006686DC /* HAPViewController.h */,
-				8205D9F4202538A1006686DC /* HAPViewController.m */,
-				8205D9F5202538A1006686DC /* HAPPlayerViewController.h */,
-				8205D9F6202538A1006686DC /* HAPPlayerViewController.m */,
-				13B07FB21A680F5B00A75B9A /* Main.storyboard */,
-				13B07FB41A680F5B00A75B9A /* LaunchScreen.storyboard */,
-				13B07FB61A680F5B00A75B9A /* Assets.xcassets */,
-				13B07FB81A680F5B00A75B9A /* Info.plist */,
+				930E5AB529BC0D0A00D9E8BA /* AppDelegate.h */,
+				930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */,
+				930E5AB829BC0D0A00D9E8BA /* main.m */,
+				930E5AC129BC0D0A00D9E8BA /* HAPManager.h */,
+				930E5AC229BC0D0A00D9E8BA /* HAPManager.m */,
+				930E5AC329BC0D0A00D9E8BA /* HAPViewController.h */,
+				930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */,
+				930E5AC529BC0D0A00D9E8BA /* HAPPlayerViewController.h */,
+				930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */,
+				930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */,
+				930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */,
+				930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */,
+				930E5AC029BC0D0A00D9E8BA /* Info.plist */,
 			);
 			path = ArkUIPlayer;
 			sourceTree = "<group>";
 		};
-		13B07F9E1A680F5B00A75B9A = {
+		930E5A9E29BC0D0A00D9E8BA = {
 			isa = PBXGroup;
 			children = (
-				13B07FA01A680F5B00A75B9A,
-				13B07FAB1A680F5B00A75B9A /* ArkUIPlayer.app */,
+				930E5AA029BC0D0A00D9E8BA,
+				930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		13B07FAA1A680F5B00A75B9A /* ArkUIPlayer */ = {
+		930E5AAE29BC0D0A00D9E8BA /* ArkUIPlayer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 13B07FC01A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */;
+			buildConfigurationList = 930E5AC829BC0D0A00D9E8BA /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */;
 			buildPhases = (
-				13B07FAB1A680F5B00A75B9A /* Sources */,
-				13B07FAC1A680F5B00A75B9A /* Frameworks */,
-				13B07FAD1A680F5B00A75B9A /* Resources */,
+				930E5AAF29BC0D0A00D9E8BA /* Sources */,
+				930E5AAE29BC0D0A00D9E8BA /* Frameworks */,
+				930E5AB129BC0D0A00D9E8BA /* Resources */,
 			);
 			buildRules = (
 			);
@@ -91,24 +91,24 @@
 			);
 			name = ArkUIPlayer;
 			productName = ArkUIPlayer;
-			productReference = 13B07FAB1A680F5B00A75B9A /* ArkUIPlayer.app */;
+			productReference = 930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		13B07F9F1A680F5B00A75B9A /* Project object */ = {
+		930E5A9F29BC0D0A00D9E8BA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 1400;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
-					13B07FAA1A680F5B00A75B9A = {
+					930E5AAE29BC0D0A00D9E8BA = {
 						CreatedOnToolsVersion = 14.0;
 					};
 				};
 			};
-			buildConfigurationList = 13B07F991A680F5B00A75B9A /* Build configuration list for PBXProject "ArkUIPlayer" */;
+			buildConfigurationList = 930E5A9929BC0D0A00D9E8BA /* Build configuration list for PBXProject "ArkUIPlayer" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -116,47 +116,47 @@
 				en,
 				Base,
 			);
-			mainGroup = 13B07F9E1A680F5B00A75B9A;
-			productRefGroup = 13B07FAE1A680F5B00A75B9A /* Products */;
+			mainGroup = 930E5A9E29BC0D0A00D9E8BA;
+			productRefGroup = 930E5AA029BC0D0A00D9E8BA /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				13B07FAA1A680F5B00A75B9A /* ArkUIPlayer */,
+				930E5AAE29BC0D0A00D9E8BA /* ArkUIPlayer */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		13B07FAB1A680F5B00A75B9A /* Sources */ = {
+		930E5AAF29BC0D0A00D9E8BA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				13B07FB11A680F5B00A75B9A /* main.m in Sources */,
-				13B07FAF1A680F5B00A75B9A /* AppDelegate.m in Sources */,
-				8205D9F3202538A1006686DC /* HAPManager.m in Sources */,
-				8205D9F5202538A1006686DC /* HAPViewController.m in Sources */,
-				8205D9F7202538A1006686DC /* HAPPlayerViewController.m in Sources */,
+				930E5AB929BC0D0A00D9E8BA /* main.m in Sources */,
+				930E5AB729BC0D0A00D9E8BA /* AppDelegate.m in Sources */,
+				930E5AC329BC0D0A00D9E8BA /* HAPManager.m in Sources */,
+				930E5AC529BC0D0A00D9E8BA /* HAPViewController.m in Sources */,
+				930E5AC729BC0D0A00D9E8BA /* HAPPlayerViewController.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
-		13B07FAD1A680F5B00A75B9A /* Resources */ = {
+		930E5AB129BC0D0A00D9E8BA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				13B07FB91A680F5B00A75B9A /* Info.plist in Resources */,
-				13B07FB31A680F5B00A75B9A /* Main.storyboard in Resources */,
-				13B07FB51A680F5B00A75B9A /* LaunchScreen.storyboard in Resources */,
-				13B07FB71A680F5B00A75B9A /* Assets.xcassets in Resources */,
+				930E5AC129BC0D0A00D9E8BA /* Info.plist in Resources */,
+				930E5ABB29BC0D0A00D9E8BA /* Main.storyboard in Resources */,
+				930E5ABD29BC0D0A00D9E8BA /* LaunchScreen.storyboard in Resources */,
+				930E5ABF29BC0D0A00D9E8BA /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		13B07FBA1A680F5B00A75B9A /* Debug */ = {
+		930E5ABA29BC0D0A00D9E8BA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -211,7 +211,7 @@
 			};
 			name = Debug;
 		};
-		13B07FBB1A680F5B00A75B9A /* Release */ = {
+		930E5ABB29BC0D0A00D9E8BA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -259,7 +259,7 @@
 			};
 			name = Release;
 		};
-		13B07FBD1A680F5B00A75B9A /* Debug */ = {
+		930E5ABD29BC0D0A00D9E8BA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -272,7 +272,7 @@
 			};
 			name = Debug;
 		};
-		13B07FBE1A680F5B00A75B9A /* Release */ = {
+		930E5ABE29BC0D0A00D9E8BA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -288,25 +288,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13B07F991A680F5B00A75B9A /* Build configuration list for PBXProject "ArkUIPlayer" */ = {
+		930E5A9929BC0D0A00D9E8BA /* Build configuration list for PBXProject "ArkUIPlayer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				13B07FBA1A680F5B00A75B9A /* Debug */,
-				13B07FBB1A680F5B00A75B9A /* Release */,
+				930E5ABA29BC0D0A00D9E8BA /* Debug */,
+				930E5ABB29BC0D0A00D9E8BA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		13B07FC01A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */ = {
+		930E5AC829BC0D0A00D9E8BA /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				13B07FBD1A680F5B00A75B9A /* Debug */,
-				13B07FBE1A680F5B00A75B9A /* Release */,
+				930E5ABD29BC0D0A00D9E8BA /* Debug */,
+				930E5ABE29BC0D0A00D9E8BA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 13B07F9F1A680F5B00A75B9A /* Project object */;
+	rootObject = 930E5A9F29BC0D0A00D9E8BA /* Project object */;
 }
