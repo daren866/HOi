@@ -1,4 +1,6 @@
 #import "HAPManager.h"
+#import <spawn.h>
+#import <sys/wait.h>
 
 @interface HAPManager ()
 
@@ -224,18 +226,14 @@ static HAPManager *_sharedInstance = nil;
         return NO;
     }
     
-    NSTask *task = [[NSTask alloc] init];
-    task.launchPath = @"/usr/bin/unzip";
-    task.arguments = @[@"-q", zipPath, @"-d", unzipPath];
+    const char *args[] = {"/usr/bin/unzip", "-q", [zipPath UTF8String], "-d", [unzipPath UTF8String], NULL};
     
-    NSPipe *pipe = [NSPipe pipe];
-    task.standardOutput = pipe;
-    task.standardError = pipe;
+    pid_t pid;
+    int status;
+    posix_spawn(&pid, "/usr/bin/unzip", NULL, NULL, (char * const *)args, NULL);
+    waitpid(pid, &status, 0);
     
-    [task launch];
-    [task waitUntilExit];
-    
-    if (task.terminationStatus != 0) {
+    if (WEXITSTATUS(status) != 0) {
         return NO;
     }
     
