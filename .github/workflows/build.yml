@@ -276,44 +276,51 @@ jobs:
         rm -rf foundation/graphic/graphic_2d
 
         download_repo() {
-          local repo=$1
+          local repo_name=$1
           local dest=$2
           local branch=$3
           
-          echo "Downloading $repo..."
+          echo "Downloading $repo_name..."
           mkdir -p "$dest"
           cd "$dest"
           
-          local http_code=$(curl -sL -o temp.tar.gz -w "%{http_code}" "https://codeload.github.com/$repo/tar.gz/$branch")
+          local url="https://gitee.com/openharmony/$repo_name/repository/archive/$branch.tar.gz"
+          local http_code=$(curl -sL -o temp.tar.gz -w "%{http_code}" "$url")
           
           if [ "$http_code" -ne 200 ]; then
-            echo "❌ Failed to download $repo, HTTP $http_code"
-            rm -f temp.tar.gz
-            cd ..
-            return 1
+            echo "⚠️ Gitee failed ($http_code), trying gitcode..."
+            url="https://gitcode.com/openharmony/$repo_name/repository/archive/$branch.tar.gz"
+            http_code=$(curl -sL -o temp.tar.gz -w "%{http_code}" "$url")
+            
+            if [ "$http_code" -ne 200 ]; then
+              echo "❌ Failed to download $repo_name, HTTP $http_code"
+              rm -f temp.tar.gz
+              cd ..
+              return 1
+            fi
           fi
           
           file_type=$(file -b temp.tar.gz)
           if echo "$file_type" | grep -q -i "gzip\|tar"; then
             tar -xz --strip-components=1 -f temp.tar.gz
             rm -f temp.tar.gz
-            echo "✅ $repo downloaded successfully"
+            echo "✅ $repo_name downloaded successfully"
             cd ..
             return 0
           else
-            echo "❌ $repo: Invalid file format: $file_type"
+            echo "❌ $repo_name: Invalid file format: $file_type"
             rm -f temp.tar.gz
             cd ..
             return 1
           fi
         }
 
-        download_repo "openharmony/ace_engine" "foundation/arkui/ace_engine" "master"
-        download_repo "openharmony/appframework" "foundation/appframework" "master"
-        download_repo "openharmony/arkui_napi" "foundation/arkui/napi" "master"
-        download_repo "openharmony/hilog" "base/hiviewdfx/hilog" "master"
-        download_repo "openharmony/c_utils" "commonlibrary/c_utils" "master"
-        download_repo "openharmony/graphic_2d" "foundation/graphic/graphic_2d" "master"
+        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master"
+        download_repo "appframework" "foundation/appframework" "master"
+        download_repo "arkui_napi" "foundation/arkui/napi" "master"
+        download_repo "hilog" "base/hiviewdfx/hilog" "master"
+        download_repo "c_utils" "commonlibrary/c_utils" "master"
+        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master"
 
         echo "✅ ArkUI-X dependencies download completed"
 
