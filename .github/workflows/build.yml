@@ -266,10 +266,7 @@ jobs:
     - name: Fetch ArkUI-X Dependencies (if not cached)
       if: steps.cache-deps.outputs.cache-hit != 'true'
       run: |
-        echo "🔍 Cloning ArkUI-X dependencies..."
-        
-        git config --global credential.helper ""
-        git config --global protocol.version 2
+        echo "🔍 Downloading ArkUI-X dependencies using tarballs..."
         
         rm -rf foundation/arkui/ace_engine
         rm -rf foundation/appframework
@@ -278,37 +275,37 @@ jobs:
         rm -rf commonlibrary/c_utils
         rm -rf foundation/graphic/graphic_2d
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/ace_engine.git foundation/arkui/ace_engine
+        mkdir -p foundation/arkui/ace_engine
         cd foundation/arkui/ace_engine
-        git sparse-checkout set frameworks/base frameworks/core interfaces/native
+        curl -L https://github.com/openharmony/ace_engine/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../..
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/appframework.git foundation/appframework
+        mkdir -p foundation/appframework
         cd foundation/appframework
-        git sparse-checkout set appexecfwk
+        curl -L https://github.com/openharmony/appframework/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../..
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/arkui_napi.git foundation/arkui/napi
+        mkdir -p foundation/arkui/napi
         cd foundation/arkui/napi
-        git sparse-checkout set ace_napi
+        curl -L https://github.com/openharmony/arkui_napi/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../..
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/hilog.git base/hiviewdfx/hilog
+        mkdir -p base/hiviewdfx/hilog
         cd base/hiviewdfx/hilog
-        git sparse-checkout set hilog_lite
+        curl -L https://github.com/openharmony/hilog/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../../..
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/c_utils.git commonlibrary/c_utils
+        mkdir -p commonlibrary/c_utils
         cd commonlibrary/c_utils
-        git sparse-checkout set base
+        curl -L https://github.com/openharmony/c_utils/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../..
 
-        GIT_TERMINAL_PROMPT=0 git clone --depth 1 --sparse https://github.com/openharmony/graphic_2d.git foundation/graphic/graphic_2d
+        mkdir -p foundation/graphic/graphic_2d
         cd foundation/graphic/graphic_2d
-        git sparse-checkout set rosen
+        curl -L https://github.com/openharmony/graphic_2d/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
         cd ../..
 
-        echo "✅ ArkUI-X dependencies cloned successfully"
+        echo "✅ ArkUI-X dependencies downloaded successfully"
 
     - name: Setup Directory Symlinks
       run: |
