@@ -266,7 +266,7 @@ jobs:
     - name: Fetch ArkUI-X Dependencies (if not cached)
       if: steps.cache-deps.outputs.cache-hit != 'true'
       run: |
-        echo "🔍 Downloading ArkUI-X dependencies using tarballs..."
+        echo "🔍 Downloading ArkUI-X dependencies..."
         
         rm -rf foundation/arkui/ace_engine
         rm -rf foundation/appframework
@@ -275,37 +275,47 @@ jobs:
         rm -rf commonlibrary/c_utils
         rm -rf foundation/graphic/graphic_2d
 
-        mkdir -p foundation/arkui/ace_engine
-        cd foundation/arkui/ace_engine
-        curl -L https://github.com/openharmony/ace_engine/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../..
+        download_repo() {
+          local repo=$1
+          local dest=$2
+          local branch=$3
+          
+          echo "Downloading $repo..."
+          mkdir -p "$dest"
+          cd "$dest"
+          
+          local http_code=$(curl -sL -o temp.tar.gz -w "%{http_code}" "https://codeload.github.com/$repo/tar.gz/$branch")
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Failed to download $repo, HTTP $http_code"
+            rm -f temp.tar.gz
+            cd ..
+            return 1
+          fi
+          
+          file_type=$(file -b temp.tar.gz)
+          if echo "$file_type" | grep -q -i "gzip\|tar"; then
+            tar -xz --strip-components=1 -f temp.tar.gz
+            rm -f temp.tar.gz
+            echo "✅ $repo downloaded successfully"
+            cd ..
+            return 0
+          else
+            echo "❌ $repo: Invalid file format: $file_type"
+            rm -f temp.tar.gz
+            cd ..
+            return 1
+          fi
+        }
 
-        mkdir -p foundation/appframework
-        cd foundation/appframework
-        curl -L https://github.com/openharmony/appframework/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../..
+        download_repo "openharmony/ace_engine" "foundation/arkui/ace_engine" "master"
+        download_repo "openharmony/appframework" "foundation/appframework" "master"
+        download_repo "openharmony/arkui_napi" "foundation/arkui/napi" "master"
+        download_repo "openharmony/hilog" "base/hiviewdfx/hilog" "master"
+        download_repo "openharmony/c_utils" "commonlibrary/c_utils" "master"
+        download_repo "openharmony/graphic_2d" "foundation/graphic/graphic_2d" "master"
 
-        mkdir -p foundation/arkui/napi
-        cd foundation/arkui/napi
-        curl -L https://github.com/openharmony/arkui_napi/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../..
-
-        mkdir -p base/hiviewdfx/hilog
-        cd base/hiviewdfx/hilog
-        curl -L https://github.com/openharmony/hilog/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../../..
-
-        mkdir -p commonlibrary/c_utils
-        cd commonlibrary/c_utils
-        curl -L https://github.com/openharmony/c_utils/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../..
-
-        mkdir -p foundation/graphic/graphic_2d
-        cd foundation/graphic/graphic_2d
-        curl -L https://github.com/openharmony/graphic_2d/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1
-        cd ../..
-
-        echo "✅ ArkUI-X dependencies downloaded successfully"
+        echo "✅ ArkUI-X dependencies download completed"
 
     - name: Setup Directory Symlinks
       run: |
