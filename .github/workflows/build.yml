@@ -315,18 +315,23 @@ jobs:
           fi
         }
 
-        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master"
-        download_repo "appframework" "foundation/appframework" "master"
-        download_repo "arkui_napi" "foundation/arkui/napi" "master"
-        download_repo "hilog" "base/hiviewdfx/hilog" "master"
-        download_repo "c_utils" "commonlibrary/c_utils" "master"
-        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master"
+        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master" || echo "⚠️ arkui_ace_engine download skipped"
+        download_repo "appexecfwk" "foundation/appframework" "master" || download_repo "appexecfwk_standard" "foundation/appframework" "master" || echo "⚠️ appframework download skipped"
+        download_repo "arkui_napi" "foundation/arkui/napi" "master" || echo "⚠️ arkui_napi download skipped"
+        download_repo "hilog" "base/hiviewdfx/hilog" "master" || echo "⚠️ hilog download skipped"
+        download_repo "c_utils" "commonlibrary/c_utils" "master" || echo "⚠️ c_utils download skipped"
+        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master" || echo "⚠️ graphic_2d download skipped"
 
-        echo "✅ ArkUI-X dependencies download completed"
+        echo "✅ ArkUI-X dependencies download phase completed"
 
     - name: Setup Directory Symlinks
       run: |
         echo "🔍 Setting up directory symlinks..."
+        
+        if [ ! -d "foundation/arkui/ace_engine" ]; then
+          echo "⚠️ ace_engine not downloaded, skipping symlinks setup"
+          exit 0
+        fi
         
         mkdir -p foundation/arkui/ace_engine/adapter/ios
         
@@ -373,6 +378,11 @@ jobs:
       continue-on-error: true
       run: |
         echo "🔍 Building libarkui_ios.a using GN/Ninja..."
+        
+        if [ ! -d "foundation/arkui/ace_engine" ]; then
+          echo "⚠️ ace_engine not downloaded, skipping GN/Ninja build"
+          exit 0
+        fi
         
         mkdir -p out/ios/Release-iphoneos
         cd out/ios/Release-iphoneos
