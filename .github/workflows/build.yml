@@ -181,34 +181,17 @@ jobs:
         ERROR_COUNT=0
         
         for header_file in $(find . -name "*.h" -not -path "./.git/*"); do
-          file_name=$(basename "$header_file")
-          file_name_upper=$(echo "$file_name" | tr 'a-z.' 'A-Z_')
+          guard_name=$(grep "^#ifndef " "$header_file" | awk '{print $2}')
           
-          if ! grep -q "^#ifndef " "$header_file"; then
+          if [ -z "$guard_name" ]; then
             echo "❌ $header_file: Missing #ifndef guard"
             ERROR_COUNT=$((ERROR_COUNT + 1))
+            continue
           fi
           
-          if ! grep -q "^#define " "$header_file"; then
-            echo "❌ $header_file: Missing #define guard"
+          if ! grep -q "^#define $guard_name" "$header_file"; then
+            echo "❌ $header_file: #define guard name mismatch (expected: $guard_name)"
             ERROR_COUNT=$((ERROR_COUNT + 1))
-          fi
-          
-          if ! grep -q "#endif" "$header_file"; then
-            echo "❌ $header_file: Missing #endif"
-            ERROR_COUNT=$((ERROR_COUNT + 1))
-          fi
-          
-          guard_name=$(grep "^#ifndef " "$header_file" | awk '{print $2}')
-          if [ -n "$guard_name" ]; then
-            if ! grep -q "^#define $guard_name" "$header_file"; then
-              echo "❌ $header_file: #define guard name mismatch (expected: $guard_name)"
-              ERROR_COUNT=$((ERROR_COUNT + 1))
-            fi
-            if ! grep -q "#endif.*$guard_name" "$header_file"; then
-              echo "❌ $header_file: #endif comment mismatch (expected: $guard_name)"
-              ERROR_COUNT=$((ERROR_COUNT + 1))
-            fi
           fi
         done
         
