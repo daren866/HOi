@@ -104,7 +104,7 @@ jobs:
 
     - name: Validate BUILD.gn source file references
       run: |
-        echo "🔍 Validating source file references in BUILD.gn files..."
+        echo "🔍 Validating BUILD.gn source file references..."
         
         ERROR_COUNT=0
         
@@ -116,6 +116,10 @@ jobs:
             
             matched_files=$(echo "$line" | grep -oE '"[^"]+\.(cpp|h|mm|m)"' | sed 's/"//g')
             for ref_file in $matched_files; do
+              if echo "$ref_file" | grep -qE '(\$|^//|ace_root|ace_engine|frameworks/core|interfaces/native)'; then
+                continue
+              fi
+              
               gn_dir=$(dirname "$gn_file")
               full_path="$gn_dir/$ref_file"
               
