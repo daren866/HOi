@@ -13,6 +13,9 @@ on:
       - '.clang-format'
       - '.github/workflows/build.yml'
       - 'ArkUIPlayer/**'
+      - 'foundation/**'
+      - 'base/**'
+      - 'commonlibrary/**'
   pull_request:
     branches: [ main, develop ]
     paths:
@@ -24,6 +27,9 @@ on:
       - '**.gni'
       - '.clang-format'
       - 'ArkUIPlayer/**'
+      - 'foundation/**'
+      - 'base/**'
+      - 'commonlibrary/**'
 
 jobs:
   lint:
@@ -242,6 +248,132 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: 'latest'
+
+    - name: Clone ArkUI-X Dependencies
+      uses: actions/cache@v4
+      id: cache-deps
+      with:
+        path: |
+          foundation/arkui/ace_engine/frameworks
+          foundation/arkui/ace_engine/interfaces
+          foundation/appframework
+          foundation/arkui/napi
+          base/hiviewdfx/hilog
+          commonlibrary/c_utils
+          foundation/graphic/graphic_2d
+        key: arkui-x-deps-${{ hashFiles('clone_arkui_x.sh') }}
+
+    - name: Fetch ArkUI-X Dependencies (if not cached)
+      if: steps.cache-deps.outputs.cache-hit != 'true'
+      run: |
+        echo "🔍 Cloning ArkUI-X dependencies..."
+        
+        mkdir -p foundation/arkui/ace_engine/frameworks
+        mkdir -p foundation/arkui/ace_engine/interfaces
+        mkdir -p foundation/appframework
+        mkdir -p foundation/arkui/napi
+        mkdir -p base/hiviewdfx/hilog
+        mkdir -p commonlibrary/c_utils
+        mkdir -p foundation/graphic/graphic_2d
+
+        git clone --depth 1 --sparse https://github.com/openharmony/ace_engine.git foundation/arkui/ace_engine
+        cd foundation/arkui/ace_engine
+        git sparse-checkout set frameworks/base frameworks/core interfaces/native
+        cd ../..
+
+        git clone --depth 1 --sparse https://github.com/openharmony/appframework.git foundation/appframework
+        cd foundation/appframework
+        git sparse-checkout set appexecfwk
+        cd ../..
+
+        git clone --depth 1 --sparse https://github.com/openharmony/arkui_napi.git foundation/arkui/napi
+        cd foundation/arkui/napi
+        git sparse-checkout set ace_napi
+        cd ../..
+
+        git clone --depth 1 --sparse https://github.com/openharmony/hilog.git base/hiviewdfx/hilog
+        cd base/hiviewdfx/hilog
+        git sparse-checkout set hilog_lite
+        cd ../../..
+
+        git clone --depth 1 --sparse https://github.com/openharmony/c_utils.git commonlibrary/c_utils
+        cd commonlibrary/c_utils
+        git sparse-checkout set base
+        cd ../..
+
+        git clone --depth 1 --sparse https://github.com/openharmony/graphic_2d.git foundation/graphic/graphic_2d
+        cd foundation/graphic/graphic_2d
+        git sparse-checkout set rosen
+        cd ../..
+
+        echo "✅ ArkUI-X dependencies cloned successfully"
+
+    - name: Setup Directory Symlinks
+      run: |
+        echo "🔍 Setting up directory symlinks..."
+        
+        mkdir -p foundation/arkui/ace_engine/adapter/ios
+        
+        cd foundation/arkui/ace_engine/adapter/ios
+        
+        rm -f build capability entrance stage osal
+        
+        ln -s ../../../../../build build
+        ln -s ../../../../../capability capability
+        ln -s ../../../../../entrance entrance
+        ln -s ../../../../../stage stage
+        ln -s ../../../../../osal osal
+        
+        cd ../../../../../
+        
+        echo "✅ Directory symlinks set up successfully"
+        
+        ls -la foundation/arkui/ace_engine/adapter/ios/
+
+    - name: Install GN and Ninja
+      run: |
+        echo "🔍 Installing GN and Ninja..."
+        
+        brew install gn ninja 2>/dev/null || true
+        
+        if ! command -v gn &> /dev/null; then
+          echo "⚠️ GN not found, downloading..."
+          curl -L https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip -o ninja.zip
+          unzip -o ninja.zip -d /usr/local/bin/
+          rm ninja.zip
+          
+          curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/git_revision:e98d0cd0a8b9a5940687a19c2c19137038675e61 -o gn.zip
+          unzip -o gn.zip -d /usr/local/bin/
+          rm gn.zip
+        fi
+        
+        gn --version
+        ninja --version
+        
+        echo "✅ GN and Ninja installed"
+
+    - name: Build libarkui_ios (GN/Ninja)
+      id: build-libarkui
+      continue-on-error: true
+      run: |
+        echo "🔍 Building libarkui_ios.a using GN/Ninja..."
+        
+        mkdir -p out/ios/Release-iphoneos
+        cd out/ios/Release-iphoneos
+        
+        gn gen . --args="target_os=\"ios\" target_cpu=\"arm64\" is_debug=false" --root=foundation/arkui/ace_engine
+        
+        ninja -j$(sysctl -n hw.ncpu) libarkui_ios
+        
+        cd ../..
+        
+        if [ -f "out/ios/Release-iphoneos/obj/ace/libarkui_ios.a" ]; then
+          echo "✅ libarkui_ios.a built successfully"
+          ls -la out/ios/Release-iphoneos/obj/ace/libarkui_ios.a
+        else
+          echo "❌ libarkui_ios.a build failed or not found"
+          exit 1
+        fi
 
     - name: Build ArkUIPlayer
       run: |
