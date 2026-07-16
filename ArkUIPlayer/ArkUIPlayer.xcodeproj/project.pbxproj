@@ -7,36 +7,36 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		930E5AB729BC0D0A00D9E8BA /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */; };
-		930E5AB929BC0D0A00D9E8BA /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AB829BC0D0A00D9E8BA /* main.m */; };
-		930E5ABB29BC0D0A00D9E8BA /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */; };
-		930E5ABD29BC0D0A00D9E8BA /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */; };
-		930E5ABF29BC0D0A00D9E8BA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */; };
-		930E5AC129BC0D0A00D9E8BA /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 930E5AC029BC0D0A00D9E8BA /* Info.plist */; };
-		930E5AC329BC0D0A00D9E8BA /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC229BC0D0A00D9E8BA /* HAPManager.m */; };
-		930E5AC529BC0D0A00D9E8BA /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */; };
-		930E5AC729BC0D0A00D9E8BA /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5F /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C61 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C62 /* Main.storyboard */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C63 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C64 /* LaunchScreen.storyboard */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C65 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C67 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArkUIPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		930E5AB529BC0D0A00D9E8BA /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
-		930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
-		930E5AB829BC0D0A00D9E8BA /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
-		930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		930E5AC029BC0D0A00D9E8BA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		930E5AC129BC0D0A00D9E8BA /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
-		930E5AC229BC0D0A00D9E8BA /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPManager.m; sourceTree = "<group>"; };
-		930E5AC329BC0D0A00D9E8BA /* HAPViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPViewController.h; sourceTree = "<group>"; };
-		930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
-		930E5AC529BC0D0A00D9E8BA /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
-		930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6F /* ArkUIPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArkUIPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C70 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C62 /* Main.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = Main.storyboard; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C64 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C71 /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPManager.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C72 /* HAPViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPViewController.h; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		930E5AAE29BC0D0A00D9E8BA /* Frameworks */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C74 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,44 +46,44 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		930E5AA029BC0D0A00D9E8BA = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C75 = {
 			isa = PBXGroup;
 			children = (
-				930E5AB529BC0D0A00D9E8BA /* AppDelegate.h */,
-				930E5AB629BC0D0A00D9E8BA /* AppDelegate.m */,
-				930E5AB829BC0D0A00D9E8BA /* main.m */,
-				930E5AC129BC0D0A00D9E8BA /* HAPManager.h */,
-				930E5AC229BC0D0A00D9E8BA /* HAPManager.m */,
-				930E5AC329BC0D0A00D9E8BA /* HAPViewController.h */,
-				930E5AC429BC0D0A00D9E8BA /* HAPViewController.m */,
-				930E5AC529BC0D0A00D9E8BA /* HAPPlayerViewController.h */,
-				930E5AC629BC0D0A00D9E8BA /* HAPPlayerViewController.m */,
-				930E5ABA29BC0D0A00D9E8BA /* Main.storyboard */,
-				930E5ABC29BC0D0A00D9E8BA /* LaunchScreen.storyboard */,
-				930E5ABE29BC0D0A00D9E8BA /* Assets.xcassets */,
-				930E5AC029BC0D0A00D9E8BA /* Info.plist */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C70 /* AppDelegate.h */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C71 /* HAPManager.h */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C72 /* HAPViewController.h */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C62 /* Main.storyboard */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C64 /* LaunchScreen.storyboard */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */,
 			);
 			path = ArkUIPlayer;
 			sourceTree = "<group>";
 		};
-		930E5A9E29BC0D0A00D9E8BA = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C76 = {
 			isa = PBXGroup;
 			children = (
-				930E5AA029BC0D0A00D9E8BA,
-				930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C75,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6F /* ArkUIPlayer.app */,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		930E5AAE29BC0D0A00D9E8BA /* ArkUIPlayer */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C77 /* ArkUIPlayer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 930E5AC829BC0D0A00D9E8BA /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */;
+			buildConfigurationList = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C78 /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */;
 			buildPhases = (
-				930E5AAF29BC0D0A00D9E8BA /* Sources */,
-				930E5AAE29BC0D0A00D9E8BA /* Frameworks */,
-				930E5AB129BC0D0A00D9E8BA /* Resources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C79 /* Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C74 /* Frameworks */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7A /* Resources */,
 			);
 			buildRules = (
 			);
@@ -91,24 +91,24 @@
 			);
 			name = ArkUIPlayer;
 			productName = ArkUIPlayer;
-			productReference = 930E5AB029BC0D0A00D9E8BA /* ArkUIPlayer.app */;
+			productReference = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6F /* ArkUIPlayer.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		930E5A9F29BC0D0A00D9E8BA /* Project object */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7B /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastUpgradeCheck = 1400;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
-					930E5AAE29BC0D0A00D9E8BA = {
+					0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C77 = {
 						CreatedOnToolsVersion = 14.0;
 					};
 				};
 			};
-			buildConfigurationList = 930E5A9929BC0D0A00D9E8BA /* Build configuration list for PBXProject "ArkUIPlayer" */;
+			buildConfigurationList = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7C /* Build configuration list for PBXProject "ArkUIPlayer" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -116,47 +116,47 @@
 				en,
 				Base,
 			);
-			mainGroup = 930E5A9E29BC0D0A00D9E8BA;
-			productRefGroup = 930E5AA029BC0D0A00D9E8BA /* Products */;
+			mainGroup = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C76;
+			productRefGroup = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C76;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				930E5AAE29BC0D0A00D9E8BA /* ArkUIPlayer */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C77 /* ArkUIPlayer */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		930E5AAF29BC0D0A00D9E8BA /* Sources */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C79 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				930E5AB929BC0D0A00D9E8BA /* main.m in Sources */,
-				930E5AB729BC0D0A00D9E8BA /* AppDelegate.m in Sources */,
-				930E5AC329BC0D0A00D9E8BA /* HAPManager.m in Sources */,
-				930E5AC529BC0D0A00D9E8BA /* HAPViewController.m in Sources */,
-				930E5AC729BC0D0A00D9E8BA /* HAPPlayerViewController.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5F /* main.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D /* AppDelegate.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
-		930E5AB129BC0D0A00D9E8BA /* Resources */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				930E5AC129BC0D0A00D9E8BA /* Info.plist in Resources */,
-				930E5ABB29BC0D0A00D9E8BA /* Main.storyboard in Resources */,
-				930E5ABD29BC0D0A00D9E8BA /* LaunchScreen.storyboard in Resources */,
-				930E5ABF29BC0D0A00D9E8BA /* Assets.xcassets in Resources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C67 /* Info.plist in Resources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C61 /* Main.storyboard in Resources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C63 /* LaunchScreen.storyboard in Resources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C65 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		930E5ABA29BC0D0A00D9E8BA /* Debug */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -211,7 +211,7 @@
 			};
 			name = Debug;
 		};
-		930E5ABB29BC0D0A00D9E8BA /* Release */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -259,7 +259,7 @@
 			};
 			name = Release;
 		};
-		930E5ABD29BC0D0A00D9E8BA /* Debug */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -272,7 +272,7 @@
 			};
 			name = Debug;
 		};
-		930E5ABE29BC0D0A00D9E8BA /* Release */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C80 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -288,25 +288,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		930E5A9929BC0D0A00D9E8BA /* Build configuration list for PBXProject "ArkUIPlayer" */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7C /* Build configuration list for PBXProject "ArkUIPlayer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				930E5ABA29BC0D0A00D9E8BA /* Debug */,
-				930E5ABB29BC0D0A00D9E8BA /* Release */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7D /* Debug */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		930E5AC829BC0D0A00D9E8BA /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */ = {
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C78 /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				930E5ABD29BC0D0A00D9E8BA /* Debug */,
-				930E5ABE29BC0D0A00D9E8BA /* Release */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7F /* Debug */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C80 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 930E5A9F29BC0D0A00D9E8BA /* Project object */;
+	rootObject = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7B /* Project object */;
 }
