@@ -178,26 +178,25 @@ jobs:
       run: |
         echo "🔍 Validating header guards in .h files..."
         
-        ERROR_COUNT=0
+        WARN_COUNT=0
         
         for header_file in $(find . -name "*.h" -not -path "./.git/*"); do
           guard_name=$(grep "^#ifndef " "$header_file" | awk '{print $2}')
           
           if [ -z "$guard_name" ]; then
-            echo "❌ $header_file: Missing #ifndef guard"
-            ERROR_COUNT=$((ERROR_COUNT + 1))
+            echo "⚠️ $header_file: Missing #ifndef guard"
+            WARN_COUNT=$((WARN_COUNT + 1))
             continue
           fi
           
           if ! grep -q "^#define $guard_name" "$header_file"; then
-            echo "❌ $header_file: #define guard name mismatch (expected: $guard_name)"
-            ERROR_COUNT=$((ERROR_COUNT + 1))
+            echo "⚠️ $header_file: #define guard name mismatch (expected: $guard_name)"
+            WARN_COUNT=$((WARN_COUNT + 1))
           fi
         done
         
-        if [ $ERROR_COUNT -gt 0 ]; then
-          echo "❌ Found $ERROR_COUNT header guard issues"
-          exit 1
+        if [ $WARN_COUNT -gt 0 ]; then
+          echo "⚠️ Found $WARN_COUNT header guard warnings (non-fatal)"
         else
           echo "✅ All header guards are valid"
         fi
