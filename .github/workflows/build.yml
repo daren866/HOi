@@ -266,8 +266,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS" \
-            LIBRARY_SEARCH_PATHS="$LIBRARY_SEARCH_PATHS" \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
+            LIBRARY_SEARCH_PATHS="$FRAMEWORK_DIR" \
             OTHER_LDFLAGS="\$(inherited) $OTHER_LDFLAGS" 2>&1 || { echo "❌ Build failed"; exit 1; }
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
