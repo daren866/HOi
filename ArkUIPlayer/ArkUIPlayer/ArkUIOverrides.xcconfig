@@ -1,0 +1,3 @@
+FRAMEWORK_SEARCH_PATHS = $(SRCROOT)/Frameworks
+LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks
+OTHER_LDFLAGS = $(inherited) -framework libarkui_ios

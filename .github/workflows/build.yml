@@ -268,19 +268,26 @@ jobs:
         echo "Other LDFlags: $OTHER_LDFLAGS"
         
         if [ -n "$HEADER_SEARCH_PATHS" ] && [ -n "$OTHER_LDFLAGS" ]; then
+          echo "📝 Creating xcconfig file..."
+          cat > ArkUIPlayer/ArkUIOverrides.xcconfig << 'EOF'
+FRAMEWORK_SEARCH_PATHS = $(SRCROOT)/Frameworks
+LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks
+OTHER_LDFLAGS = $(inherited) -framework libarkui_ios
+EOF
+          echo "✅ Created ArkUIOverrides.xcconfig"
+          cat ArkUIPlayer/ArkUIOverrides.xcconfig
+          
           xcodebuild -project ArkUIPlayer.xcodeproj \
             -scheme ArkUIPlayer \
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -derivedDataPath build \
+            -xcconfig ArkUIPlayer/ArkUIOverrides.xcconfig \
             clean build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            LIBRARY_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            OTHER_LDFLAGS="\$(inherited) $OTHER_LDFLAGS" 2>&1 || { echo "❌ Build failed"; exit 1; }
+            IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || { echo "❌ Build failed"; exit 1; }
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
             -scheme ArkUIPlayer \
