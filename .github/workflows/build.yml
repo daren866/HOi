@@ -104,50 +104,59 @@ jobs:
           echo "⚠️ GN installation failed"
         fi
 
-    - name: Download ArkUI-X dependencies
+    - name: Download ArkUI-X core dependencies
       continue-on-error: true
       run: |
-        echo "🔍 Downloading ArkUI-X dependencies..."
+        echo "🔍 Downloading ArkUI-X core dependencies..."
         
-        REPOS=(
-          "foundation/arkui/ace_engine"
-          "foundation/appexecfwk"
-          "base"
-          "commonlibrary"
-          "frameworks/arkui"
-          "interfaces/innerkits"
-          "interfaces/kits"
+        git config --global credential.helper ""
+        export GIT_TERMINAL_PROMPT=0
+        
+        REPO_MAP=(
+          "foundation/arkui/ace_engine|https://gitee.com/openharmony/arkui_ace_engine.git"
+          "foundation/appframework|https://gitee.com/arkui-x/app_framework.git"
+          "foundation/arkui/napi|https://gitee.com/openharmony/arkui_napi.git"
+          "foundation/graphic/graphic_2d|https://gitee.com/openharmony/graphic_graphic_2d.git"
+          "foundation/multimedia/image_framework|https://gitee.com/openharmony/multimedia_image_framework.git"
+          "foundation/filemanagement/file_api|https://gitee.com/openharmony/filemanagement_file_api.git"
+          "foundation/communication/netmanager_base|https://gitee.com/openharmony/communication_netmanager_base.git"
+          "arkcompiler/runtime_core|https://gitee.com/openharmony/arkcompiler_runtime_core.git"
+          "arkcompiler/ets_runtime|https://gitee.com/openharmony/arkcompiler_ets_runtime.git"
+          "commonlibrary/c_utils|https://gitee.com/openharmony/commonlibrary_c_utils.git"
+          "base/hiviewdfx/hilog|https://gitee.com/openharmony/hiviewdfx_hilog.git"
+          "base/global/resource_management|https://gitee.com/openharmony/global_resource_management.git"
+          "build|https://gitee.com/openharmony/build.git"
+          "build_plugins|https://gitee.com/arkui-x/build_plugins.git"
+          "plugins|https://gitee.com/arkui-x/plugins.git"
+          "third_party|https://gitee.com/openharmony/third_party.git"
+          "interfaces/inner_api|https://gitee.com/openharmony/interfaces_inner_api.git"
+          "interfaces/native|https://gitee.com/openharmony/interfaces_native.git"
         )
         
-        GH_MIRRORS=(
-          "https://gitee.com/openharmony-sig/ace_engine.git"
-          "https://gitee.com/openharmony/appexecfwk.git"
-          "https://gitee.com/openharmony-sig/base.git"
-          "https://gitee.com/openharmony/commonlibrary.git"
-          "https://gitee.com/openharmony-sig/arkui.git"
-          "https://gitee.com/openharmony-sig/innerkits.git"
-          "https://gitee.com/openharmony-sig/kits.git"
-        )
-        
-        for i in "${!REPOS[@]}"; do
-          REPO_PATH="${REPOS[$i]}"
-          MIRROR_URL="${GH_MIRRORS[$i]}"
+        for entry in "${REPO_MAP[@]}"; do
+          REPO_PATH=$(echo "$entry" | cut -d'|' -f1)
+          REPO_URL=$(echo "$entry" | cut -d'|' -f2)
           
           if [ -d "$REPO_PATH" ]; then
             echo "⚠️ $REPO_PATH already exists, skipping"
             continue
           fi
           
-          echo "Downloading $REPO_PATH..."
+          echo "📥 Cloning $REPO_PATH..."
           
           mkdir -p "$(dirname "$REPO_PATH")"
           
-          if git clone --depth 1 --sparse "$MIRROR_URL" "$REPO_PATH" 2>/dev/null; then
-            echo "✅ $REPO_PATH downloaded successfully"
+          if git clone --depth 1 "$REPO_URL" "$REPO_PATH" 2>&1; then
+            echo "✅ $REPO_PATH cloned successfully"
           else
-            echo "❌ $REPO_PATH download failed"
+            echo "❌ $REPO_PATH clone failed"
           fi
         done
+        
+        echo "📊 Dependency download summary:"
+        ls -la foundation/arkui/ 2>/dev/null || echo "foundation/arkui/ not found"
+        ls -la foundation/appframework/ 2>/dev/null || echo "foundation/appframework/ not found"
+        ls -la build/ 2>/dev/null || echo "build/ not found"
 
     - name: Setup directory structure
       run: |
@@ -176,31 +185,50 @@ jobs:
           exit 0
         fi
         
+        if [ ! -d "build" ]; then
+          echo "⚠️ build directory not found, skipping build"
+          exit 0
+        fi
+        
+        ROOT_DIR=$(pwd)
+        echo "Root directory: $ROOT_DIR"
+        
         cd foundation/arkui/ace_engine
         
         mkdir -p out/ios
-        gn gen out/ios --args='target_os="ios" target_cpu="arm64" ios_deployment_target="13.0" is_debug=false'
         
-        if [ $? -eq 0 ]; then
-          ninja -C out/ios libarkui_ios 2>&1 | tail -50
-          
-          if [ -f "out/ios/libarkui_ios.a" ]; then
-            echo "✅ libarkui_ios.a built successfully"
-            ls -la out/ios/libarkui_ios.a
-            du -sh out/ios/libarkui_ios.a
-          else
-            echo "❌ libarkui_ios.a not found after build"
-          fi
-        else
+        echo "Generating GN build files..."
+        gn gen out/ios --args='target_os="ios" target_cpu="arm64" ios_deployment_target="13.0" is_debug=false use_ios_simulator=false' --root="$ROOT_DIR"
+        
+        if [ $? -ne 0 ]; then
           echo "❌ GN gen failed"
+          exit 0
         fi
+        
+        echo "Building libarkui_ios..."
+        ninja -C out/ios ace_packages 2>&1 | tail -100
+        
+        LIB_PATH=$(find out -name "libarkui_ios.a" 2>/dev/null | head -1)
+        
+        if [ -n "$LIB_PATH" ]; then
+          echo "✅ libarkui_ios.a built successfully at: $LIB_PATH"
+          ls -la "$LIB_PATH"
+          du -sh "$LIB_PATH"
+          
+          cp "$LIB_PATH" "$ROOT_DIR/libarkui_ios.a"
+          echo "✅ Copied libarkui_ios.a to project root"
+        else
+          echo "❌ libarkui_ios.a not found after build"
+          find out -name "*.a" 2>/dev/null | head -20
+        fi
+        
+        cd "$ROOT_DIR"
 
     - name: Configure Xcode project for ArkUI-X
       run: |
         echo "🔍 Checking if libarkui_ios.a exists..."
         
         LIB_PATH=$(find . -name "libarkui_ios.a" 2>/dev/null | head -1)
-        LIB_DIR=$(dirname "$LIB_PATH")
         
         if [ -n "$LIB_PATH" ]; then
           echo "✅ libarkui_ios.a found at: $LIB_PATH"
@@ -208,40 +236,19 @@ jobs:
           
           sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
           
-          PLIST_FILE="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
+          PBX_PROJ="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
           
-          HEADER_SEARCH_PATHS=$(cat << 'EOF'
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios/**",
-					"$(SRCROOT)/../foundation/arkui/ace_engine/frameworks/**",
-					"$(SRCROOT)/../foundation/appexecfwk/**",
-					"$(SRCROOT)/../base/**",
-					"$(SRCROOT)/../commonlibrary/**",
-				);
-EOF
-)
-          
-          LIBRARY_SEARCH_PATHS=$(cat << 'EOF'
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../foundation/arkui/ace_engine/out/ios/**",
-				);
-EOF
-)
-          
-          OTHER_LDFLAGS=$(cat << 'EOF'
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-llibarkui_ios",
-					"-ObjC++",
-				);
-EOF
-)
-          
-          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $HEADER_SEARCH_PATHS" "$PLIST_FILE"
-          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $LIBRARY_SEARCH_PATHS" "$PLIST_FILE"
-          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $OTHER_LDFLAGS" "$PLIST_FILE"
+          if [ -f "$PBX_PROJ" ]; then
+            echo "📝 Updating Xcode project file..."
+            
+            sed -i '' 's|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = "$(SRCROOT)/../foundation/arkui/ace_engine" "$(SRCROOT)/../foundation/arkui/ace_engine/frameworks" "$(SRCROOT)/../foundation/arkui/ace_engine/interfaces" "$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios" "$(SRCROOT)/../foundation/appframework" "$(SRCROOT)/../commonlibrary/c_utils" "$(SRCROOT)/../base/hiviewdfx/hilog" "$(SRCROOT)/../foundation/graphic/graphic_2d" "$(SRCROOT)/../third_party" |g' "$PBX_PROJ"
+            
+            sed -i '' 's|LIBRARY_SEARCH_PATHS = |LIBRARY_SEARCH_PATHS = "$(SRCROOT)/.." |g' "$PBX_PROJ"
+            
+            sed -i '' 's|OTHER_LDFLAGS = |OTHER_LDFLAGS = -force_load "$(SRCROOT)/../libarkui_ios.a" |g' "$PBX_PROJ"
+            
+            echo "✅ Xcode project updated with ArkUI-X paths"
+          fi
           
           echo "✅ Xcode project configured for ArkUI-X"
         else

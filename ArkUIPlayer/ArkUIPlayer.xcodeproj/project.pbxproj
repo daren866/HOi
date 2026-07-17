@@ -259,6 +259,20 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.ArkUIPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = "1,2";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/..",
+					"$(SRCROOT)/../foundation/arkui/ace_engine",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/frameworks",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/interfaces",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios",
+					"$(SRCROOT)/../foundation/appframework",
+					"$(SRCROOT)/../commonlibrary/c_utils",
+					"$(SRCROOT)/../base/hiviewdfx/hilog",
+					"$(SRCROOT)/../foundation/graphic/graphic_2d",
+					"$(SRCROOT)/../third_party",
+				);
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/..";
+				OTHER_LDFLAGS = "$(inherited)";
 			};
 			name = Debug;
 		};
@@ -272,6 +286,20 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.ArkUIPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = "1,2";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/..",
+					"$(SRCROOT)/../foundation/arkui/ace_engine",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/frameworks",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/interfaces",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios",
+					"$(SRCROOT)/../foundation/appframework",
+					"$(SRCROOT)/../commonlibrary/c_utils",
+					"$(SRCROOT)/../base/hiviewdfx/hilog",
+					"$(SRCROOT)/../foundation/graphic/graphic_2d",
+					"$(SRCROOT)/../third_party",
+				);
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/..";
+				OTHER_LDFLAGS = "$(inherited)";
 			};
 			name = Release;
 		};
