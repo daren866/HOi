@@ -235,7 +235,7 @@ jobs:
           HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
           
           if [ -d "$HEADER_PATH" ]; then
-            HEADER_PATHS="$HEADER_PATHS \"$(SRCROOT)/$HEADER_PATH\" \"$(SRCROOT)/$HEADER_PATH_SIM\""
+            HEADER_PATHS="$HEADER_PATHS \"\$(SRCROOT)/$HEADER_PATH\" \"\$(SRCROOT)/$HEADER_PATH_SIM\""
           fi
           
           LDFLAGS="$LDFLAGS $FW_NAME"
