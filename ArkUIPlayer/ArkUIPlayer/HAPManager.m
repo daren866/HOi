@@ -1,4 +1,5 @@
 #import "HAPManager.h"
+#import "StageApplication.h"
 #import <spawn.h>
 #import <sys/wait.h>
 
@@ -41,8 +42,10 @@ static HAPManager *_sharedInstance = nil;
         return;
     }
     
-    [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
+    NSString *bundleDirectory = [[NSBundle mainBundle] bundlePath];
+    [StageApplication configModuleWithBundleDirectory:bundleDirectory];
     [StageApplication launchApplication];
+    
     self.isInitialized = YES;
 }
 
@@ -89,6 +92,8 @@ static HAPManager *_sharedInstance = nil;
         [fm removeItemAtPath:extractDir error:nil];
         
         self.currentHAPPath = hapPath;
+        
+        [StageApplication loadModule:@"entry" entryFile:@"index.ets"];
         
         dispatch_async(dispatch_get_main_queue(), ^{
             completion(YES, nil);
@@ -314,6 +319,8 @@ static HAPManager *_sharedInstance = nil;
 }
 
 - (void)unloadCurrentHAP {
+    [StageApplication releaseViewControllers];
+    
     NSFileManager *fm = [NSFileManager defaultManager];
     
     NSError *error = nil;

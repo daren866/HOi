@@ -7,18 +7,11 @@
 @implementation HAPPlayerViewController
 
 - (instancetype)initWithHAPManager:(HAPManager *)manager bundleName:(NSString *)bundleName {
-    NSString *abilityName = @"EntryAbility";
-    NSString *moduleName = @"entry";
-    
-    if (!bundleName || bundleName.length == 0) {
-        bundleName = @"com.example.hap";
-    }
-    
-    NSString *instanceName = [NSString stringWithFormat:@"%@:%@:%@", bundleName, moduleName, abilityName];
-    
+    NSString *instanceName = [NSString stringWithFormat:@"%@:entry:MainAbility", bundleName ?: @"com.example.hap"];
     self = [super initWithInstanceName:instanceName];
     if (self) {
         self.hapManager = manager;
+        self.bundleName = bundleName ?: @"com.example.hap";
         [self.hapManager initializeArkUI];
     }
     return self;
@@ -29,8 +22,6 @@
     
     self.title = @"ArkUI Player";
     self.view.backgroundColor = [UIColor whiteColor];
-    self.edgesForExtendedLayout = UIRectEdgeNone;
-    self.extendedLayoutIncludesOpaqueBars = YES;
 }
 
 - (void)viewWillAppear:(BOOL)animated {

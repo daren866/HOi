@@ -402,13 +402,12 @@ jobs:
 
     - name: Build libarkui_ios (GN/Ninja)
       id: build-libarkui
-      continue-on-error: true
       run: |
         echo "🔍 Building libarkui_ios.a using GN/Ninja..."
         
         if [ ! -d "foundation/arkui/ace_engine" ]; then
-          echo "⚠️ ace_engine not downloaded, skipping GN/Ninja build"
-          exit 0
+          echo "❌ ace_engine not downloaded"
+          exit 1
         fi
         
         mkdir -p out/ios/Release-iphoneos
@@ -420,11 +419,15 @@ jobs:
         
         cd ../..
         
-        if [ -f "out/ios/Release-iphoneos/obj/ace/libarkui_ios.a" ]; then
-          echo "✅ libarkui_ios.a built successfully"
-          ls -la out/ios/Release-iphoneos/obj/ace/libarkui_ios.a
+        LIB_PATH=$(find out/ios -name "libarkui_ios.a" 2>/dev/null | head -1)
+        
+        if [ -n "$LIB_PATH" ]; then
+          echo "✅ libarkui_ios.a built successfully at: $LIB_PATH"
+          ls -la "$LIB_PATH"
+          echo "LIBARKUI_PATH=$LIB_PATH" >> $GITHUB_ENV
         else
           echo "❌ libarkui_ios.a build failed or not found"
+          find out/ios -name "*.a" 2>/dev/null | head -10
           exit 1
         fi
 
@@ -446,11 +449,15 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || true
+          IPHONEOS_DEPLOYMENT_TARGET=13.0
         
-        echo "✅ ArkUIPlayer build completed (with continue-on-error)"
+        echo "✅ ArkUIPlayer build completed"
         
         find build -name "*.app" -type d 2>/dev/null | head -5
+        
+        if [ -d "build/Build/Products/Debug-iphoneos/ArkUIPlayer.app" ]; then
+          ls -la build/Build/Products/Debug-iphoneos/ArkUIPlayer.app/
+        fi
 
     - name: Archive ArkUIPlayer
       continue-on-error: true
