@@ -205,60 +205,44 @@ jobs:
           echo "✅ Set HAS_ARKUI_X=1"
         fi
 
-    - name: Configure Xcode project for ArkUI-X
-      run: |
-        echo "🔍 Configuring Xcode project for ArkUI-X..."
-        
-        PBX_PROJ="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
-        
-        if [ ! -f "$PBX_PROJ" ]; then
-          echo "❌ Xcode project file not found!"
-          exit 1
-        fi
-        
-        echo "📝 Updating Xcode project file..."
-        
-        FRAMEWORK_DIR="ArkUIPlayer/Frameworks"
-        echo "Framework dir: $FRAMEWORK_DIR"
-        
-        FRAMEWORKS_IN_DIR=$(ls -la "$FRAMEWORK_DIR" | grep xcframework | awk '{print $9}')
-        echo "Found frameworks: $FRAMEWORKS_IN_DIR"
-        
-        HEADER_PATHS=""
-        LDFLAGS="-framework"
-        
-        for fw in $FRAMEWORKS_IN_DIR; do
-          FW_NAME=$(echo "$fw" | sed 's/\.xcframework$//')
-          echo "Processing framework: $FW_NAME"
-          
-          HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
-          HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
-          
-          if [ -d "$HEADER_PATH" ]; then
-            HEADER_PATHS="$HEADER_PATHS \"\$(SRCROOT)/$HEADER_PATH\" \"\$(SRCROOT)/$HEADER_PATH_SIM\""
-          fi
-          
-          LDFLAGS="$LDFLAGS $FW_NAME"
-        done
-        
-        echo "Header paths: $HEADER_PATHS"
-        echo "Link flags: $LDFLAGS"
-        
-        sed -i '' "s|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = $HEADER_PATHS |g" "$PBX_PROJ"
-        
-        sed -i '' 's|LIBRARY_SEARCH_PATHS = |LIBRARY_SEARCH_PATHS = "$(SRCROOT)/Frameworks" |g' "$PBX_PROJ"
-        
-        sed -i '' "s|OTHER_LDFLAGS = |OTHER_LDFLAGS = $LDFLAGS |g" "$PBX_PROJ"
-        
-        echo "✅ Xcode project updated with ArkUI-X paths"
-
     - name: Build ArkUIPlayer using xcodebuild
       run: |
         echo "🔍 Building ArkUIPlayer app..."
         
         cd ArkUIPlayer
         
-        xcodebuild -project ArkUIPlayer.xcodeproj \
+        FRAMEWORK_DIR="Frameworks"
+        FRAMEWORKS_IN_DIR=$(ls -la "$FRAMEWORK_DIR" 2>/dev/null | grep xcframework | awk '{print $9}')
+        
+        HEADER_SEARCH_PATHS=""
+        LIBRARY_SEARCH_PATHS=""
+        OTHER_LDFLAGS=""
+        
+        if [ -n "$FRAMEWORKS_IN_DIR" ]; then
+          echo "Found frameworks in Frameworks: $FRAMEWORKS_IN_DIR"
+          
+          for fw in $FRAMEWORKS_IN_DIR; do
+            FW_NAME=$(echo "$fw" | sed 's/\.xcframework$//')
+            echo "Processing framework: $FW_NAME"
+            
+            HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
+            HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
+            
+            if [ -d "$HEADER_PATH" ]; then
+              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS \"\$(SRCROOT)/$HEADER_PATH\" \"\$(SRCROOT)/$HEADER_PATH_SIM\""
+            fi
+            
+            OTHER_LDFLAGS="$OTHER_LDFLAGS -framework $FW_NAME"
+          done
+          
+          LIBRARY_SEARCH_PATHS="\"$(SRCROOT)/$FRAMEWORK_DIR\""
+        fi
+        
+        echo "Header search paths: $HEADER_SEARCH_PATHS"
+        echo "Library search paths: $LIBRARY_SEARCH_PATHS"
+        echo "Other LDFlags: $OTHER_LDFLAGS"
+        
+        BUILD_CMD="xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
           -destination 'generic/platform=iOS' \
           -configuration Release \
@@ -266,8 +250,23 @@ jobs:
           clean build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || { echo "❌ Build failed"; exit 1; }
+          CODE_SIGN_IDENTITY='' \
+          IPHONEOS_DEPLOYMENT_TARGET=13.0"
+        
+        if [ -n "$HEADER_SEARCH_PATHS" ]; then
+          BUILD_CMD="$BUILD_CMD HEADER_SEARCH_PATHS=$HEADER_SEARCH_PATHS"
+        fi
+        if [ -n "$LIBRARY_SEARCH_PATHS" ]; then
+          BUILD_CMD="$BUILD_CMD LIBRARY_SEARCH_PATHS=$LIBRARY_SEARCH_PATHS"
+        fi
+        if [ -n "$OTHER_LDFLAGS" ]; then
+          BUILD_CMD="$BUILD_CMD OTHER_LDFLAGS=\"\$(inherited) $OTHER_LDFLAGS\""
+        fi
+        
+        echo "Running build command:"
+        echo "$BUILD_CMD"
+        
+        eval "$BUILD_CMD" 2>&1 || { echo "❌ Build failed"; exit 1; }
         
         echo "✅ Build completed"
         
