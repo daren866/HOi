@@ -13,6 +13,9 @@ on:
       - '**.m'
       - '.github/workflows/build.yml'
       - 'ArkUIPlayer/**'
+      - 'foundation/**'
+      - 'base/**'
+      - 'commonlibrary/**'
   pull_request:
     branches: [ main, develop ]
 
@@ -20,7 +23,7 @@ jobs:
   build-app:
     name: Build ArkUIPlayer App
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
     - name: Checkout code
@@ -31,21 +34,225 @@ jobs:
       with:
         xcode-version: 'latest'
 
-    - name: Verify project files
+    - name: Clean workspace
       run: |
-        echo "🔍 Verifying project files..."
-        ls -la ArkUIPlayer/
-        ls -la ArkUIPlayer/ArkUIPlayer/
-        ls -la ArkUIPlayer/ArkUIPlayer.xcodeproj/
-        cat ArkUIPlayer/ArkUIPlayer/HAPManager.h | head -10
+        echo "🔍 Cleaning workspace..."
+        rm -rf foundation base commonlibrary out build ArkUIPlayer.xcarchive ArkUIPlayer-IPA
+
+    - name: Install system dependencies
+      run: |
+        echo "🔍 Installing system dependencies..."
+        brew install wget gnu-tar 2>/dev/null || true
+        echo "✅ System dependencies installed"
+
+    - name: Install GN and Ninja
+      continue-on-error: true
+      run: |
+        echo "🔍 Installing GN and Ninja..."
+        
+        if ! command -v ninja &> /dev/null; then
+          echo "Installing Ninja..."
+          curl -L https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip -o ninja.zip
+          unzip -o ninja.zip -d /usr/local/bin/
+          rm ninja.zip
+        fi
+        
+        if command -v ninja &> /dev/null; then
+          echo "✅ Ninja installed: $(ninja --version)"
+        else
+          echo "⚠️ Ninja installation failed"
+        fi
+        
+        if ! command -v gn &> /dev/null; then
+          echo "Installing GN..."
+          
+          if brew install gn 2>/dev/null; then
+            echo "✅ GN installed via brew"
+          else
+            echo "⚠️ Brew install failed, trying prebuilt binaries..."
+            
+            GN_URLS=(
+              "https://github.com/nicocha30/gn-build/releases/download/gn-v0.2455.9b987f0/gn-macos-x86_64.zip"
+              "https://storage.googleapis.com/chrome-infra-packages/gn/mac-amd64/gn.zip"
+              "https://github.com/acgtyrant/gn-build/releases/download/v0.1.0/gn-macos-amd64.zip"
+            )
+            
+            for url in "${GN_URLS[@]}"; do
+              echo "Trying: $url"
+              if curl -L "$url" -o gn.zip --fail --max-time 30; then
+                file_type=$(file -b gn.zip)
+                echo "File type: $file_type"
+                if echo "$file_type" | grep -q -i "zip"; then
+                  unzip -o gn.zip -d /usr/local/bin/ 2>/dev/null
+                  rm gn.zip
+                  if command -v gn &> /dev/null; then
+                    echo "✅ GN installed from $url"
+                    break
+                  fi
+                else
+                  echo "⚠️ Not a valid zip file, skipping"
+                  rm gn.zip
+                fi
+              fi
+            done
+          fi
+        fi
+        
+        if command -v gn &> /dev/null; then
+          echo "✅ GN installed: $(gn --version)"
+        else
+          echo "⚠️ GN installation failed"
+        fi
+
+    - name: Download ArkUI-X dependencies
+      continue-on-error: true
+      run: |
+        echo "🔍 Downloading ArkUI-X dependencies..."
+        
+        REPOS=(
+          "foundation/arkui/ace_engine"
+          "foundation/appexecfwk"
+          "base"
+          "commonlibrary"
+          "frameworks/arkui"
+          "interfaces/innerkits"
+          "interfaces/kits"
+        )
+        
+        GH_MIRRORS=(
+          "https://gitee.com/openharmony-sig/ace_engine.git"
+          "https://gitee.com/openharmony/appexecfwk.git"
+          "https://gitee.com/openharmony-sig/base.git"
+          "https://gitee.com/openharmony/commonlibrary.git"
+          "https://gitee.com/openharmony-sig/arkui.git"
+          "https://gitee.com/openharmony-sig/innerkits.git"
+          "https://gitee.com/openharmony-sig/kits.git"
+        )
+        
+        for i in "${!REPOS[@]}"; do
+          REPO_PATH="${REPOS[$i]}"
+          MIRROR_URL="${GH_MIRRORS[$i]}"
+          
+          if [ -d "$REPO_PATH" ]; then
+            echo "⚠️ $REPO_PATH already exists, skipping"
+            continue
+          fi
+          
+          echo "Downloading $REPO_PATH..."
+          
+          mkdir -p "$(dirname "$REPO_PATH")"
+          
+          if git clone --depth 1 --sparse "$MIRROR_URL" "$REPO_PATH" 2>/dev/null; then
+            echo "✅ $REPO_PATH downloaded successfully"
+          else
+            echo "❌ $REPO_PATH download failed"
+          fi
+        done
+
+    - name: Setup directory structure
+      run: |
+        echo "🔍 Setting up directory structure..."
+        
+        if [ ! -d "foundation/arkui/ace_engine" ]; then
+          mkdir -p foundation/arkui/ace_engine
+        fi
+        
+        ln -sf "$(pwd)/foundation/arkui/ace_engine" "$(pwd)/ace_engine" 2>/dev/null || true
+        
+        echo "✅ Directory structure set up"
+
+    - name: Build libarkui_ios.a
+      continue-on-error: true
+      run: |
+        echo "🔍 Building libarkui_ios.a..."
+        
+        if ! command -v gn &> /dev/null || ! command -v ninja &> /dev/null; then
+          echo "⚠️ GN or Ninja not available, skipping build"
+          exit 0
+        fi
+        
+        if [ ! -d "foundation/arkui/ace_engine" ]; then
+          echo "⚠️ ace_engine not found, skipping build"
+          exit 0
+        fi
+        
+        cd foundation/arkui/ace_engine
+        
+        mkdir -p out/ios
+        gn gen out/ios --args='target_os="ios" target_cpu="arm64" ios_deployment_target="13.0" is_debug=false'
+        
+        if [ $? -eq 0 ]; then
+          ninja -C out/ios libarkui_ios 2>&1 | tail -50
+          
+          if [ -f "out/ios/libarkui_ios.a" ]; then
+            echo "✅ libarkui_ios.a built successfully"
+            ls -la out/ios/libarkui_ios.a
+            du -sh out/ios/libarkui_ios.a
+          else
+            echo "❌ libarkui_ios.a not found after build"
+          fi
+        else
+          echo "❌ GN gen failed"
+        fi
+
+    - name: Configure Xcode project for ArkUI-X
+      run: |
+        echo "🔍 Checking if libarkui_ios.a exists..."
+        
+        LIB_PATH=$(find . -name "libarkui_ios.a" 2>/dev/null | head -1)
+        LIB_DIR=$(dirname "$LIB_PATH")
+        
+        if [ -n "$LIB_PATH" ]; then
+          echo "✅ libarkui_ios.a found at: $LIB_PATH"
+          echo "Configuring Xcode project for ArkUI-X..."
+          
+          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
+          
+          PLIST_FILE="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
+          
+          HEADER_SEARCH_PATHS=$(cat << 'EOF'
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios/**",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/frameworks/**",
+					"$(SRCROOT)/../foundation/appexecfwk/**",
+					"$(SRCROOT)/../base/**",
+					"$(SRCROOT)/../commonlibrary/**",
+				);
+EOF
+)
+          
+          LIBRARY_SEARCH_PATHS=$(cat << 'EOF'
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../foundation/arkui/ace_engine/out/ios/**",
+				);
+EOF
+)
+          
+          OTHER_LDFLAGS=$(cat << 'EOF'
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-llibarkui_ios",
+					"-ObjC++",
+				);
+EOF
+)
+          
+          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $HEADER_SEARCH_PATHS" "$PLIST_FILE"
+          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $LIBRARY_SEARCH_PATHS" "$PLIST_FILE"
+          sed -i '' "/TARGETED_DEVICE_FAMILY = \"1,2\";/a $OTHER_LDFLAGS" "$PLIST_FILE"
+          
+          echo "✅ Xcode project configured for ArkUI-X"
+        else
+          echo "⚠️ libarkui_ios.a not found, proceeding without ArkUI-X integration"
+        fi
 
     - name: Build ArkUIPlayer using xcodebuild
       run: |
         echo "🔍 Building ArkUIPlayer app..."
         
         cd ArkUIPlayer
-        
-        echo "Running xcodebuild..."
         
         xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
@@ -69,9 +276,7 @@ jobs:
           ls -la "$APP_PATH/"
           du -sh "$APP_PATH"
         else
-          echo "❌ .app file not found in build directory!"
-          echo "Searching in home directory..."
-          find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -5
+          echo "❌ .app file not found!"
           exit 1
         fi
 
