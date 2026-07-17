@@ -279,6 +279,7 @@ jobs:
           echo "✅ Created ArkUIOverrides.xcconfig"
           cat ArkUIPlayer/ArkUIOverrides.xcconfig
           
+          echo "🔨 Starting xcodebuild..."
           xcodebuild -project ArkUIPlayer.xcodeproj \
             -scheme ArkUIPlayer \
             -destination 'generic/platform=iOS' \
@@ -290,7 +291,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            WARNING_CFLAGS="-Wno-nullability-completeness" 2>&1 || { echo "❌ Build failed"; exit 1; }
+            WARNING_CFLAGS="-Wno-nullability-completeness" 2>&1 | tee build.log || { echo "❌ Build failed"; echo "📋 Last 100 lines of build log:"; tail -100 build.log; exit 1; }
+          echo "✅ Build completed successfully"
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
             -scheme ArkUIPlayer \
