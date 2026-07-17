@@ -1,7 +1,7 @@
 #import "HAPManager.h"
 
 #if HAS_ARKUI_X
-#import <libarkui_ios/StageApplication.h>
+#import "StageApplication.h"
 #endif
 
 #import <spawn.h>
