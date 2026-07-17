@@ -272,11 +272,9 @@ jobs:
         
         if [ -n "$HEADER_SEARCH_PATHS" ] && [ -n "$OTHER_LDFLAGS" ]; then
           echo "📝 Creating xcconfig file..."
-          cat > ArkUIPlayer/ArkUIOverrides.xcconfig << 'EOF'
-FRAMEWORK_SEARCH_PATHS = $(SRCROOT)/Frameworks
-LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks
-OTHER_LDFLAGS = $(inherited) -framework libarkui_ios
-EOF
+          echo 'FRAMEWORK_SEARCH_PATHS = $(SRCROOT)/Frameworks' > ArkUIPlayer/ArkUIOverrides.xcconfig
+          echo 'LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
+          echo 'OTHER_LDFLAGS = $(inherited) -framework libarkui_ios' >> ArkUIPlayer/ArkUIOverrides.xcconfig
           echo "✅ Created ArkUIOverrides.xcconfig"
           cat ArkUIPlayer/ArkUIOverrides.xcconfig
           
