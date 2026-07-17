@@ -248,30 +248,32 @@ jobs:
         echo "Library search paths: $LIBRARY_SEARCH_PATHS"
         echo "Other LDFlags: $OTHER_LDFLAGS"
         
-        BUILD_ARGS=""
-        if [ -n "$HEADER_SEARCH_PATHS" ]; then
-          BUILD_ARGS="$BUILD_ARGS HEADER_SEARCH_PATHS=\"$HEADER_SEARCH_PATHS\""
+        if [ -n "$HEADER_SEARCH_PATHS" ] && [ -n "$OTHER_LDFLAGS" ]; then
+          xcodebuild -project ArkUIPlayer.xcodeproj \
+            -scheme ArkUIPlayer \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+            HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS" \
+            LIBRARY_SEARCH_PATHS="$LIBRARY_SEARCH_PATHS" \
+            OTHER_LDFLAGS="\$(inherited) $OTHER_LDFLAGS" 2>&1 || { echo "❌ Build failed"; exit 1; }
+        else
+          xcodebuild -project ArkUIPlayer.xcodeproj \
+            -scheme ArkUIPlayer \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || { echo "❌ Build failed"; exit 1; }
         fi
-        if [ -n "$LIBRARY_SEARCH_PATHS" ]; then
-          BUILD_ARGS="$BUILD_ARGS LIBRARY_SEARCH_PATHS=\"$LIBRARY_SEARCH_PATHS\""
-        fi
-        if [ -n "$OTHER_LDFLAGS" ]; then
-          BUILD_ARGS="$BUILD_ARGS OTHER_LDFLAGS=\"\$(inherited) $OTHER_LDFLAGS\""
-        fi
-        
-        echo "Build args: $BUILD_ARGS"
-        
-        xcodebuild -project ArkUIPlayer.xcodeproj \
-          -scheme ArkUIPlayer \
-          -destination 'generic/platform=iOS' \
-          -configuration Release \
-          -derivedDataPath build \
-          clean build \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY='' \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-          $BUILD_ARGS 2>&1 || { echo "❌ Build failed"; exit 1; }
         
         echo "✅ Build completed"
         
