@@ -231,14 +231,35 @@ jobs:
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
             
+            if [ -d "$HEADER_PATH" ]; then
+              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH"
+            fi
+            if [ -d "$HEADER_PATH_SIM" ]; then
+              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH_SIM"
+            fi
+            
             OTHER_LDFLAGS="$OTHER_LDFLAGS -framework $FW_NAME"
           done
           
           LIBRARY_SEARCH_PATHS="."
         fi
         
+        echo "Header search paths: $HEADER_SEARCH_PATHS"
         echo "Library search paths: $LIBRARY_SEARCH_PATHS"
         echo "Other LDFlags: $OTHER_LDFLAGS"
+        
+        BUILD_ARGS=""
+        if [ -n "$HEADER_SEARCH_PATHS" ]; then
+          BUILD_ARGS="$BUILD_ARGS HEADER_SEARCH_PATHS=\"$HEADER_SEARCH_PATHS\""
+        fi
+        if [ -n "$LIBRARY_SEARCH_PATHS" ]; then
+          BUILD_ARGS="$BUILD_ARGS LIBRARY_SEARCH_PATHS=\"$LIBRARY_SEARCH_PATHS\""
+        fi
+        if [ -n "$OTHER_LDFLAGS" ]; then
+          BUILD_ARGS="$BUILD_ARGS OTHER_LDFLAGS=\"\$(inherited) $OTHER_LDFLAGS\""
+        fi
+        
+        echo "Build args: $BUILD_ARGS"
         
         xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
@@ -250,8 +271,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY='' \
           IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-          LIBRARY_SEARCH_PATHS="$LIBRARY_SEARCH_PATHS" \
-          OTHER_LDFLAGS="\$(inherited) $OTHER_LDFLAGS" 2>&1 || { echo "❌ Build failed"; exit 1; }
+          $BUILD_ARGS 2>&1 || { echo "❌ Build failed"; exit 1; }
         
         echo "✅ Build completed"
         
