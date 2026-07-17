@@ -2,7 +2,7 @@
 #import "HAPManager.h"
 
 #if HAS_ARKUI_X
-#import "StageViewController.h"
+#import <libarkui_ios/StageViewController.h>
 #endif
 
 #if HAS_ARKUI_X
