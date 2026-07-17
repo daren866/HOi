@@ -61,24 +61,7 @@ jobs:
           echo "⚠️ ACE Tools installation failed"
         fi
 
-    - name: Download ArkUI-X SDK using ACE Tools
-      continue-on-error: true
-      run: |
-        echo "🔍 Downloading ArkUI-X SDK using ACE Tools..."
-        
-        if command -v ace &> /dev/null; then
-          echo "Using ACE Tools to install SDK..."
-          ace sdk install 2>&1 || ace sdk install --version 1.0.0 2>&1 || true
-        fi
-        
-        SDK_DIR="$HOME/Library/ArkUI-X/Sdk"
-        echo "Checking SDK directory: $SDK_DIR"
-        ls -la "$SDK_DIR" 2>/dev/null || echo "SDK directory not found"
-        
-        find "$SDK_DIR" -name "libarkui_ios*" 2>/dev/null || echo "libarkui_ios not found in SDK"
-
     - name: Download ArkUI-X SDK from official Huawei mirror
-      continue-on-error: true
       run: |
         echo "🔍 Downloading ArkUI-X SDK from official Huawei mirror..."
         
@@ -87,22 +70,28 @@ jobs:
           "https://repo.huaweicloud.com/arkui-crossplatform/sdk/0.0.9.6/darwin/arkui-x-darwin-arm64-0.0.9.6-Canary1.zip"
         )
         
+        DOWNLOAD_SUCCESS=0
+        
         for url in "${SDK_URLS[@]}"; do
           echo "Trying: $url"
+          echo "Checking URL availability..."
+          curl -sI "$url" | head -5
+          
           if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 300; then
             file_size=$(wc -c < arkui-x-sdk.zip)
             echo "File size: $file_size bytes"
+            
             if [ "$file_size" -gt 1000000 ]; then
               echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
-              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1 || true
+              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
               rm arkui-x-sdk.zip
               
               echo "📁 SDK directory contents:"
-              find arkui-x-sdk -name "libarkui_ios*" 2>/dev/null
-              find arkui-x-sdk -name "*.xcframework" 2>/dev/null
-              find arkui-x-sdk -name "*.framework" 2>/dev/null
+              ls -la arkui-x-sdk/ 2>/dev/null || echo "arkui-x-sdk directory is empty"
+              find arkui-x-sdk -type f | head -50
               
               echo "✅ SDK downloaded successfully"
+              DOWNLOAD_SUCCESS=1
               break
             else
               echo "⚠️ File too small ($file_size bytes), skipping"
@@ -112,76 +101,114 @@ jobs:
             echo "⚠️ Download failed: $url"
           fi
         done
+        
+        if [ "$DOWNLOAD_SUCCESS" -eq 0 ]; then
+          echo "❌ Failed to download ArkUI-X SDK from all sources!"
+          exit 1
+        fi
+
+    - name: Verify SDK structure and find framework
+      run: |
+        echo "🔍 Verifying SDK structure..."
+        
+        if [ ! -d "arkui-x-sdk" ]; then
+          echo "❌ arkui-x-sdk directory not found!"
+          exit 1
+        fi
+        
+        echo "📁 Full SDK directory listing:"
+        ls -laR arkui-x-sdk/
+        
+        echo ""
+        echo "🔍 Searching for XCFramework and framework files..."
+        
+        XCFRAMEWORK=$(find arkui-x-sdk -name "*.xcframework" -type d | head -1)
+        FRAMEWORK=$(find arkui-x-sdk -name "*.framework" -type d | head -1)
+        
+        echo "Found XCFramework: $XCFRAMEWORK"
+        echo "Found Framework: $FRAMEWORK"
+        
+        if [ -z "$XCFRAMEWORK" ] && [ -z "$FRAMEWORK" ]; then
+          echo "❌ Neither XCFramework nor Framework found in SDK!"
+          echo "Listing all files to debug:"
+          find arkui-x-sdk -type f
+          exit 1
+        fi
 
     - name: Copy ArkUI-X framework to project
       run: |
         echo "🔍 Copying ArkUI-X framework to project..."
         
-        SDK_DIRS=(
-          "$HOME/Library/ArkUI-X/Sdk"
-          "./arkui-x-sdk"
-          "./arkui-x"
-        )
+        XCFRAMEWORK=$(find arkui-x-sdk -name "*.xcframework" -type d | head -1)
+        FRAMEWORK=$(find arkui-x-sdk -name "*.framework" -type d | head -1)
         
-        for dir in "${SDK_DIRS[@]}"; do
-          if [ -d "$dir" ]; then
-            echo "Searching in: $dir"
-            
-            XCFRAMEWORK=$(find "$dir" -name "libarkui_ios.xcframework" 2>/dev/null | head -1)
-            FRAMEWORK=$(find "$dir" -name "libarkui_ios.framework" 2>/dev/null | head -1)
-            
-            if [ -n "$XCFRAMEWORK" ]; then
-              echo "✅ Found XCFramework at: $XCFRAMEWORK"
-              mkdir -p ArkUIPlayer/Frameworks
-              cp -r "$XCFRAMEWORK" ArkUIPlayer/Frameworks/
-              echo "✅ Copied XCFramework to Frameworks"
-              break
-            elif [ -n "$FRAMEWORK" ]; then
-              echo "✅ Found Framework at: $FRAMEWORK"
-              mkdir -p ArkUIPlayer/Frameworks
-              cp -r "$FRAMEWORK" ArkUIPlayer/Frameworks/
-              echo "✅ Copied Framework to Frameworks"
-              break
-            fi
-          fi
-        done
+        mkdir -p ArkUIPlayer/Frameworks
+        
+        if [ -n "$XCFRAMEWORK" ]; then
+          echo "✅ Found XCFramework at: $XCFRAMEWORK"
+          cp -r "$XCFRAMEWORK" ArkUIPlayer/Frameworks/
+          echo "✅ Copied XCFramework to Frameworks"
+        elif [ -n "$FRAMEWORK" ]; then
+          echo "✅ Found Framework at: $FRAMEWORK"
+          cp -r "$FRAMEWORK" ArkUIPlayer/Frameworks/
+          echo "✅ Copied Framework to Frameworks"
+        else
+          echo "❌ No framework found!"
+          exit 1
+        fi
+        
+        echo "📁 Frameworks directory contents:"
+        ls -la ArkUIPlayer/Frameworks/
         
         if [ -d "ArkUIPlayer/Frameworks/libarkui_ios.xcframework" ]; then
           echo "✅ libarkui_ios.xcframework found in project"
           sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
           echo "✅ Set HAS_ARKUI_X=1"
+        elif [ -d "ArkUIPlayer/Frameworks/libarkui_ios.framework" ]; then
+          echo "✅ libarkui_ios.framework found in project"
+          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
+          echo "✅ Set HAS_ARKUI_X=1"
         else
-          echo "⚠️ libarkui_ios framework not found, proceeding without ArkUI-X integration"
+          echo "❌ libarkui_ios framework not found in project!"
+          exit 1
         fi
 
     - name: Configure Xcode project for ArkUI-X
       run: |
-        echo "🔍 Checking if libarkui_ios framework exists..."
+        echo "🔍 Configuring Xcode project for ArkUI-X..."
         
-        XCFRAMEWORK_PATH="ArkUIPlayer/Frameworks/libarkui_ios.xcframework"
+        PBX_PROJ="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
         
-        if [ -d "$XCFRAMEWORK_PATH" ]; then
-          echo "✅ libarkui_ios.xcframework found"
-          echo "Configuring Xcode project for ArkUI-X..."
-          
-          PBX_PROJ="ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj"
-          
-          if [ -f "$PBX_PROJ" ]; then
-            echo "📝 Updating Xcode project file for XCFramework..."
-            
-            sed -i '' 's|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers" "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator/libarkui_ios.framework/Headers" |g' "$PBX_PROJ"
-            
-            sed -i '' 's|LIBRARY_SEARCH_PATHS = |LIBRARY_SEARCH_PATHS = "$(SRCROOT)/Frameworks" |g' "$PBX_PROJ"
-            
-            sed -i '' 's|OTHER_LDFLAGS = |OTHER_LDFLAGS = -framework libarkui_ios |g' "$PBX_PROJ"
-            
-            echo "✅ Xcode project updated with ArkUI-X XCFramework paths"
-          fi
-          
-          echo "✅ Xcode project configured for ArkUI-X"
-        else
-          echo "⚠️ libarkui_ios framework not found, proceeding without ArkUI-X integration"
+        if [ ! -f "$PBX_PROJ" ]; then
+          echo "❌ Xcode project file not found!"
+          exit 1
         fi
+        
+        echo "📝 Updating Xcode project file..."
+        
+        FRAMEWORK_DIR="ArkUIPlayer/Frameworks"
+        echo "Framework dir: $FRAMEWORK_DIR"
+        
+        if [ -d "ArkUIPlayer/Frameworks/libarkui_ios.xcframework" ]; then
+          HEADER_PATH="$FRAMEWORK_DIR/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers"
+          HEADER_PATH_SIM="$FRAMEWORK_DIR/libarkui_ios.xcframework/ios-arm64_x86_64-simulator/libarkui_ios.framework/Headers"
+        elif [ -d "ArkUIPlayer/Frameworks/libarkui_ios.framework" ]; then
+          HEADER_PATH="$FRAMEWORK_DIR/libarkui_ios.framework/Headers"
+          HEADER_PATH_SIM="$FRAMEWORK_DIR/libarkui_ios.framework/Headers"
+        else
+          echo "❌ Framework not found!"
+          exit 1
+        fi
+        
+        echo "Header paths: $HEADER_PATH"
+        
+        sed -i '' "s|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = \"$(SRCROOT)/$HEADER_PATH\" \"$(SRCROOT)/$HEADER_PATH_SIM\" |g" "$PBX_PROJ"
+        
+        sed -i '' 's|LIBRARY_SEARCH_PATHS = |LIBRARY_SEARCH_PATHS = "$(SRCROOT)/Frameworks" |g' "$PBX_PROJ"
+        
+        sed -i '' 's|OTHER_LDFLAGS = |OTHER_LDFLAGS = -framework libarkui_ios |g' "$PBX_PROJ"
+        
+        echo "✅ Xcode project updated with ArkUI-X paths"
 
     - name: Build ArkUIPlayer using xcodebuild
       run: |
