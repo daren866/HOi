@@ -43,7 +43,15 @@ jobs:
       run: |
         echo "🔍 Building ArkUIPlayer app..."
         
+        pwd
+        ls -la
+        
         cd ArkUIPlayer
+        
+        pwd
+        ls -la
+        
+        echo "Running xcodebuild..."
         
         xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
@@ -53,10 +61,11 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0
+          IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || { echo "❌ Build failed"; exit 1; }
         
         echo "✅ Build completed"
         
+        echo "Searching for .app files..."
         find . -name "*.app" -type d 2>/dev/null
         
         APP_PATH=$(find . -name "*.app" -type d | head -1)
