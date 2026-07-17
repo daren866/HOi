@@ -267,9 +267,13 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
           IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-          2>&1 | tail -100
+          2>&1 | tee build_log.txt
+        
+        BUILD_EXIT_CODE=${PIPESTATUS[0]}
+        echo "Build exit code: $BUILD_EXIT_CODE"
         
         APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+        
         if [ -n "$APP_PATH" ]; then
           echo "✅ ArkUIPlayer build completed"
           echo "Found .app at: $APP_PATH"
@@ -281,9 +285,8 @@ jobs:
           echo "🔍 Reverting to stub mode..."
           sed -i '' 's/#define HAS_ARKUI_X 1/#define HAS_ARKUI_X 0/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
           
-          sed -i '' '/HEADER_SEARCH_PATHS = (/d' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
-          sed -i '' '/LIBRARY_SEARCH_PATHS = (/d' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
-          sed -i '' '/OTHER_LDFLAGS = (/d' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
+          echo "Current HAPManager.h content:"
+          cat ArkUIPlayer/ArkUIPlayer/HAPManager.h | head -20
           
           rm -rf build
           mkdir -p build
@@ -298,7 +301,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            2>&1 | tail -50
+            2>&1 | tee build_log_stub.txt
           
           APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
           if [ -n "$APP_PATH" ]; then
@@ -308,6 +311,8 @@ jobs:
             du -sh "$APP_PATH"
           else
             echo "❌ .app file not found in stub mode either!"
+            echo "Listing build directory:"
+            find build -type f -name "*.app" -o -name "*.dSYM" 2>/dev/null | head -20
             exit 1
           fi
         fi
@@ -316,17 +321,33 @@ jobs:
       run: |
         echo "🔍 Packaging unsigned IPA manually..."
         
+        echo "Searching for .app files..."
+        find build -name "*.app" -type d 2>/dev/null
+        
         APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "❌ .app file not found!"
-          exit 1
+          echo "❌ .app file not found in default location!"
+          APP_PATH=$(find build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ .app file not found anywhere!"
+            exit 1
+          else
+            echo "Found .app at alternative location: $APP_PATH"
+          fi
+        else
+          echo "Found .app at: $APP_PATH"
         fi
         
-        echo "Found .app at: $APP_PATH"
+        ls -la "$APP_PATH/"
+        du -sh "$APP_PATH"
         
         mkdir -p ArkUIPlayer-IPA/Payload
         cp -r "$APP_PATH" ArkUIPlayer-IPA/Payload/
+        
+        echo "Listing Payload directory before zip:"
+        ls -la ArkUIPlayer-IPA/Payload/
+        du -sh ArkUIPlayer-IPA/Payload/
         
         cd ArkUIPlayer-IPA
         zip -r ArkUIPlayer.ipa Payload/
@@ -336,6 +357,14 @@ jobs:
         
         ls -la ArkUIPlayer-IPA/
         du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa
+        
+        if [ ! -f ArkUIPlayer-IPA/ArkUIPlayer.ipa ]; then
+          echo "❌ IPA file not created!"
+          exit 1
+        fi
+        
+        IPA_SIZE=$(du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa | awk '{print $1}')
+        echo "IPA size: $IPA_SIZE"
 
     - name: Upload unsigned IPA
       uses: actions/upload-artifact@v4
