@@ -214,7 +214,16 @@ jobs:
         
         cd ArkUIPlayer
         
+        echo "📁 Current directory:"
+        pwd
+        echo "📁 ArkUIPlayer directory contents:"
+        ls -la
+        
         FRAMEWORK_DIR="Frameworks"
+        echo "📁 Framework directory: $FRAMEWORK_DIR"
+        echo "📁 Framework directory contents:"
+        ls -la "$FRAMEWORK_DIR" 2>/dev/null || echo "Directory does not exist"
+        
         FRAMEWORKS_IN_DIR=$(ls -la "$FRAMEWORK_DIR" 2>/dev/null | grep xcframework | awk '{print $9}')
         
         HEADER_SEARCH_PATHS=""
@@ -227,6 +236,9 @@ jobs:
           for fw in $FRAMEWORKS_IN_DIR; do
             FW_NAME=$(echo "$fw" | sed 's/\.xcframework$//')
             echo "Processing framework: $FW_NAME"
+            
+            echo "📁 XCFramework internal structure:"
+            ls -la "$FRAMEWORK_DIR/$fw/"
             
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
