@@ -164,21 +164,26 @@ jobs:
       run: |
         echo "🔍 Copying ArkUI-X framework to project..."
         
-        XCFRAMEWORK=$(find arkui-x-sdk -name "*.xcframework" -type d | head -1)
-        FRAMEWORK=$(find arkui-x-sdk -name "*.framework" -type d | head -1)
+        echo "📋 Listing all XCFramework files in SDK..."
+        find arkui-x-sdk -name "*.xcframework" -type d
+        
+        ARKUI_XCFRAMEWORK=$(find arkui-x-sdk -name "libarkui_ios.xcframework" -type d | head -1)
+        
+        if [ -z "$ARKUI_XCFRAMEWORK" ]; then
+          echo "⚠️ libarkui_ios.xcframework not found, searching for other arkui XCFrameworks..."
+          find arkui-x-sdk -name "*arkui*.xcframework" -type d
+          
+          ARKUI_XCFRAMEWORK=$(find arkui-x-sdk -name "*arkui*.xcframework" -type d | head -1)
+        fi
         
         mkdir -p ArkUIPlayer/Frameworks
         
-        if [ -n "$XCFRAMEWORK" ]; then
-          echo "✅ Found XCFramework at: $XCFRAMEWORK"
-          cp -r "$XCFRAMEWORK" ArkUIPlayer/Frameworks/
+        if [ -n "$ARKUI_XCFRAMEWORK" ]; then
+          echo "✅ Found ArkUI XCFramework at: $ARKUI_XCFRAMEWORK"
+          cp -r "$ARKUI_XCFRAMEWORK" ArkUIPlayer/Frameworks/
           echo "✅ Copied XCFramework to Frameworks"
-        elif [ -n "$FRAMEWORK" ]; then
-          echo "✅ Found Framework at: $FRAMEWORK"
-          cp -r "$FRAMEWORK" ArkUIPlayer/Frameworks/
-          echo "✅ Copied Framework to Frameworks"
         else
-          echo "❌ No framework found!"
+          echo "❌ No ArkUI framework found!"
           exit 1
         fi
         
@@ -194,8 +199,10 @@ jobs:
           sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
           echo "✅ Set HAS_ARKUI_X=1"
         else
-          echo "❌ libarkui_ios framework not found in project!"
-          exit 1
+          FRAMEWORK_NAME=$(basename "$ARKUI_XCFRAMEWORK")
+          echo "⚠️ Using $FRAMEWORK_NAME instead of libarkui_ios"
+          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
+          echo "✅ Set HAS_ARKUI_X=1"
         fi
 
     - name: Configure Xcode project for ArkUI-X
@@ -214,24 +221,34 @@ jobs:
         FRAMEWORK_DIR="ArkUIPlayer/Frameworks"
         echo "Framework dir: $FRAMEWORK_DIR"
         
-        if [ -d "ArkUIPlayer/Frameworks/libarkui_ios.xcframework" ]; then
-          HEADER_PATH="$FRAMEWORK_DIR/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers"
-          HEADER_PATH_SIM="$FRAMEWORK_DIR/libarkui_ios.xcframework/ios-arm64_x86_64-simulator/libarkui_ios.framework/Headers"
-        elif [ -d "ArkUIPlayer/Frameworks/libarkui_ios.framework" ]; then
-          HEADER_PATH="$FRAMEWORK_DIR/libarkui_ios.framework/Headers"
-          HEADER_PATH_SIM="$FRAMEWORK_DIR/libarkui_ios.framework/Headers"
-        else
-          echo "❌ Framework not found!"
-          exit 1
-        fi
+        FRAMEWORKS_IN_DIR=$(ls -la "$FRAMEWORK_DIR" | grep xcframework | awk '{print $9}')
+        echo "Found frameworks: $FRAMEWORKS_IN_DIR"
         
-        echo "Header paths: $HEADER_PATH"
+        HEADER_PATHS=""
+        LDFLAGS="-framework"
         
-        sed -i '' "s|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = \"$(SRCROOT)/$HEADER_PATH\" \"$(SRCROOT)/$HEADER_PATH_SIM\" |g" "$PBX_PROJ"
+        for fw in $FRAMEWORKS_IN_DIR; do
+          FW_NAME=$(echo "$fw" | sed 's/\.xcframework$//')
+          echo "Processing framework: $FW_NAME"
+          
+          HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
+          HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
+          
+          if [ -d "$HEADER_PATH" ]; then
+            HEADER_PATHS="$HEADER_PATHS \"$(SRCROOT)/$HEADER_PATH\" \"$(SRCROOT)/$HEADER_PATH_SIM\""
+          fi
+          
+          LDFLAGS="$LDFLAGS $FW_NAME"
+        done
+        
+        echo "Header paths: $HEADER_PATHS"
+        echo "Link flags: $LDFLAGS"
+        
+        sed -i '' "s|HEADER_SEARCH_PATHS = |HEADER_SEARCH_PATHS = $HEADER_PATHS |g" "$PBX_PROJ"
         
         sed -i '' 's|LIBRARY_SEARCH_PATHS = |LIBRARY_SEARCH_PATHS = "$(SRCROOT)/Frameworks" |g' "$PBX_PROJ"
         
-        sed -i '' 's|OTHER_LDFLAGS = |OTHER_LDFLAGS = -framework libarkui_ios |g' "$PBX_PROJ"
+        sed -i '' "s|OTHER_LDFLAGS = |OTHER_LDFLAGS = $LDFLAGS |g" "$PBX_PROJ"
         
         echo "✅ Xcode project updated with ArkUI-X paths"
 
