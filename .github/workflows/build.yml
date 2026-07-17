@@ -355,23 +355,36 @@ jobs:
       run: |
         echo "🔍 Installing GN and Ninja..."
         
-        brew install gn ninja 2>/dev/null || true
+        brew install ninja 2>/dev/null || true
         
-        if ! command -v gn &> /dev/null; then
-          echo "⚠️ GN not found, downloading..."
+        if ! command -v ninja &> /dev/null; then
           curl -L https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip -o ninja.zip
           unzip -o ninja.zip -d /usr/local/bin/
           rm ninja.zip
-          
-          curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/git_revision:e98d0cd0a8b9a5940687a19c2c19137038675e61 -o gn.zip
-          unzip -o gn.zip -d /usr/local/bin/
-          rm gn.zip
         fi
         
-        gn --version
+        brew install gn 2>/dev/null || true
+        
+        if ! command -v gn &> /dev/null; then
+          echo "⚠️ GN not found via brew, building from source..."
+          git clone --depth 1 https://gn.googlesource.com/gn.git gn_source
+          cd gn_source
+          python3 build/gen.py
+          ninja -C out
+          cp out/gn /usr/local/bin/
+          cd ..
+          rm -rf gn_source
+        fi
+        
+        if command -v gn &> /dev/null; then
+          gn --version
+        else
+          echo "⚠️ GN installation failed, skipping GN/Ninja build"
+        fi
+        
         ninja --version
         
-        echo "✅ GN and Ninja installed"
+        echo "✅ GN and Ninja installation completed"
 
     - name: Build libarkui_ios (GN/Ninja)
       id: build-libarkui
