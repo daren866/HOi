@@ -275,6 +275,7 @@ jobs:
           echo 'HEADER_SEARCH_PATHS = $(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers' > ArkUIPlayer/ArkUIOverrides.xcconfig
           echo 'LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
           echo 'OTHER_LDFLAGS = $(inherited) -framework libarkui_ios' >> ArkUIPlayer/ArkUIOverrides.xcconfig
+          echo 'WARNING_CFLAGS = -Wno-nullability-completeness' >> ArkUIPlayer/ArkUIOverrides.xcconfig
           echo "✅ Created ArkUIOverrides.xcconfig"
           cat ArkUIPlayer/ArkUIOverrides.xcconfig
           
@@ -288,7 +289,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            IPHONEOS_DEPLOYMENT_TARGET=13.0 2>&1 || { echo "❌ Build failed"; exit 1; }
+            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+            WARNING_CFLAGS="-Wno-nullability-completeness" 2>&1 || { echo "❌ Build failed"; exit 1; }
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
             -scheme ArkUIPlayer \

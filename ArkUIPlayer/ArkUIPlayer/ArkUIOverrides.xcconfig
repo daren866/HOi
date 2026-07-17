@@ -1,3 +1,4 @@
 HEADER_SEARCH_PATHS = $(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers
 LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks
 OTHER_LDFLAGS = $(inherited) -framework libarkui_ios
+WARNING_CFLAGS = -Wno-nullability-completeness
