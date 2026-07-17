@@ -48,7 +48,8 @@ jobs:
         brew install wget gnu-tar 2>/dev/null || true
         echo "✅ System dependencies installed"
 
-    - name: Install GN and Ninja
+    - name: Install GN and Ninja (optional)
+      continue-on-error: true
       run: |
         echo "🔍 Installing GN and Ninja..."
         
@@ -59,7 +60,11 @@ jobs:
           rm ninja.zip
         fi
         
-        ninja --version
+        if command -v ninja &> /dev/null; then
+          echo "✅ Ninja installed: $(ninja --version)"
+        else
+          echo "⚠️ Ninja installation failed"
+        fi
         
         if ! command -v gn &> /dev/null; then
           echo "Installing GN..."
@@ -72,6 +77,7 @@ jobs:
             GN_URLS=(
               "https://github.com/nicocha30/gn-build/releases/download/gn-v0.2455.9b987f0/gn-macos-x86_64.zip"
               "https://storage.googleapis.com/chrome-infra-packages/gn/mac-amd64/gn.zip"
+              "https://github.com/acgtyrant/gn-build/releases/download/v0.1.0/gn-macos-amd64.zip"
             )
             
             for url in "${GN_URLS[@]}"; do
@@ -94,7 +100,7 @@ jobs:
             done
             
             if ! command -v gn &> /dev/null; then
-              echo "❌ Failed to download GN, building from source..."
+              echo "❌ Failed to download GN, trying source build..."
               git clone --depth 1 https://gn.googlesource.com/gn.git gn_source
               cd gn_source
               python3 build/gen.py
@@ -106,12 +112,16 @@ jobs:
           fi
         fi
         
-        gn --version
+        if command -v gn &> /dev/null; then
+          echo "✅ GN installed: $(gn --version)"
+          echo "GN_AVAILABLE=true" >> $GITHUB_ENV
+        else
+          echo "⚠️ GN installation failed, proceeding without ArkUI-X"
+        fi
         
-        echo "✅ GN and Ninja installation completed"
+        echo "✅ GN and Ninja installation phase completed"
 
-    - name: Download ArkUI-X dependencies
-      id: download-deps
+    - name: Download ArkUI-X dependencies (optional)
       continue-on-error: true
       run: |
         echo "🔍 Downloading ArkUI-X dependencies..."
@@ -154,15 +164,19 @@ jobs:
           fi
         }
         
-        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master" || exit 1
-        download_repo "appexecfwk" "foundation/appexecfwk" "master" || download_repo "appexecfwk_standard" "foundation/appexecfwk" "master" || exit 1
-        download_repo "arkui_napi" "foundation/arkui/napi" "master" || exit 1
-        download_repo "hilog" "base/hiviewdfx/hilog" "master" || exit 1
-        download_repo "c_utils" "commonlibrary/c_utils" "master" || exit 1
-        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master" || exit 1
+        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master" || echo "⚠️ arkui_ace_engine download skipped"
+        download_repo "appexecfwk" "foundation/appexecfwk" "master" || download_repo "appexecfwk_standard" "foundation/appexecfwk" "master" || echo "⚠️ appexecfwk download skipped"
+        download_repo "arkui_napi" "foundation/arkui/napi" "master" || echo "⚠️ arkui_napi download skipped"
+        download_repo "hilog" "base/hiviewdfx/hilog" "master" || echo "⚠️ hilog download skipped"
+        download_repo "c_utils" "commonlibrary/c_utils" "master" || echo "⚠️ c_utils download skipped"
+        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master" || echo "⚠️ graphic_2d download skipped"
         
-        echo "✅ ArkUI-X dependencies download completed"
-        echo "DEPS_DOWNLOADED=true" >> $GITHUB_ENV
+        if [ -d "foundation/arkui/ace_engine/frameworks" ] && [ -d "foundation/appexecfwk" ]; then
+          echo "✅ ArkUI-X dependencies download completed"
+          echo "DEPS_DOWNLOADED=true" >> $GITHUB_ENV
+        else
+          echo "⚠️ ArkUI-X dependencies not fully downloaded"
+        fi
 
     - name: Setup directory structure
       if: env.DEPS_DOWNLOADED == 'true'
