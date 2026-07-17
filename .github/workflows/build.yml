@@ -11,14 +11,8 @@ on:
       - '**.h'
       - '**.mm'
       - '**.m'
-      - '**.gn'
-      - '**.gni'
-      - '.clang-format'
       - '.github/workflows/build.yml'
       - 'ArkUIPlayer/**'
-      - 'foundation/**'
-      - 'base/**'
-      - 'commonlibrary/**'
   pull_request:
     branches: [ main, develop ]
 
@@ -26,7 +20,7 @@ jobs:
   build-app:
     name: Build ArkUIPlayer App
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
 
     steps:
     - name: Checkout code
@@ -37,317 +31,66 @@ jobs:
       with:
         xcode-version: 'latest'
 
-    - name: Clean workspace
+    - name: Verify project files
       run: |
-        echo "🔍 Cleaning workspace..."
-        rm -rf foundation base commonlibrary out build ArkUIPlayer.xcarchive ArkUIPlayer-IPA
-        
-    - name: Install system dependencies
-      run: |
-        echo "🔍 Installing system dependencies..."
-        brew install wget gnu-tar 2>/dev/null || true
-        echo "✅ System dependencies installed"
+        echo "🔍 Verifying project files..."
+        ls -la ArkUIPlayer/
+        ls -la ArkUIPlayer/ArkUIPlayer/
+        ls -la ArkUIPlayer/ArkUIPlayer.xcodeproj/
+        cat ArkUIPlayer/ArkUIPlayer/HAPManager.h | head -10
 
-    - name: Install GN and Ninja (optional)
-      continue-on-error: true
-      run: |
-        echo "🔍 Installing GN and Ninja..."
-        
-        if ! command -v ninja &> /dev/null; then
-          echo "Installing Ninja..."
-          curl -L https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip -o ninja.zip
-          unzip -o ninja.zip -d /usr/local/bin/
-          rm ninja.zip
-        fi
-        
-        if command -v ninja &> /dev/null; then
-          echo "✅ Ninja installed: $(ninja --version)"
-        else
-          echo "⚠️ Ninja installation failed"
-        fi
-        
-        if ! command -v gn &> /dev/null; then
-          echo "Installing GN..."
-          
-          if brew install gn 2>/dev/null; then
-            echo "✅ GN installed via brew"
-          else
-            echo "⚠️ Brew install failed, trying prebuilt binaries..."
-            
-            GN_URLS=(
-              "https://github.com/nicocha30/gn-build/releases/download/gn-v0.2455.9b987f0/gn-macos-x86_64.zip"
-              "https://storage.googleapis.com/chrome-infra-packages/gn/mac-amd64/gn.zip"
-              "https://github.com/acgtyrant/gn-build/releases/download/v0.1.0/gn-macos-amd64.zip"
-            )
-            
-            for url in "${GN_URLS[@]}"; do
-              echo "Trying: $url"
-              if curl -L "$url" -o gn.zip --fail --max-time 30; then
-                file_type=$(file -b gn.zip)
-                echo "File type: $file_type"
-                if echo "$file_type" | grep -q -i "zip"; then
-                  unzip -o gn.zip -d /usr/local/bin/ 2>/dev/null
-                  rm gn.zip
-                  if command -v gn &> /dev/null; then
-                    echo "✅ GN installed from $url"
-                    break
-                  fi
-                else
-                  echo "⚠️ Not a valid zip file, skipping"
-                  rm gn.zip
-                fi
-              fi
-            done
-            
-            if ! command -v gn &> /dev/null; then
-              echo "❌ Failed to download GN, trying source build..."
-              git clone --depth 1 https://gn.googlesource.com/gn.git gn_source
-              cd gn_source
-              python3 build/gen.py
-              ninja -C out
-              cp out/gn /usr/local/bin/
-              cd ..
-              rm -rf gn_source
-            fi
-          fi
-        fi
-        
-        if command -v gn &> /dev/null; then
-          echo "✅ GN installed: $(gn --version)"
-          echo "GN_AVAILABLE=true" >> $GITHUB_ENV
-        else
-          echo "⚠️ GN installation failed, proceeding without ArkUI-X"
-        fi
-        
-        echo "✅ GN and Ninja installation phase completed"
-
-    - name: Download ArkUI-X dependencies (optional)
-      continue-on-error: true
-      run: |
-        echo "🔍 Downloading ArkUI-X dependencies..."
-        
-        download_repo() {
-          local repo_name=$1
-          local dest=$2
-          local branch=$3
-          
-          echo "Downloading $repo_name..."
-          mkdir -p "$dest"
-          
-          local url="https://gitee.com/openharmony/$repo_name/repository/archive/$branch.tar.gz"
-          local http_code=$(curl -sL -o "$dest/temp.tar.gz" -w "%{http_code}" "$url")
-          
-          if [ "$http_code" -ne 200 ]; then
-            echo "⚠️ Gitee failed ($http_code), trying gitcode..."
-            url="https://gitcode.com/openharmony/$repo_name/repository/archive/$branch.tar.gz"
-            http_code=$(curl -sL -o "$dest/temp.tar.gz" -w "%{http_code}" "$url")
-            
-            if [ "$http_code" -ne 200 ]; then
-              echo "❌ Failed to download $repo_name, HTTP $http_code"
-              rm -rf "$dest"
-              return 1
-            fi
-          fi
-          
-          file_type=$(file -b "$dest/temp.tar.gz")
-          if echo "$file_type" | grep -q -i "gzip\|tar"; then
-            cd "$dest"
-            tar -xz --strip-components=1 -f temp.tar.gz
-            rm -f temp.tar.gz
-            cd - >/dev/null
-            echo "✅ $repo_name downloaded successfully"
-            return 0
-          else
-            echo "❌ $repo_name: Invalid file format: $file_type"
-            rm -rf "$dest"
-            return 1
-          fi
-        }
-        
-        download_repo "arkui_ace_engine" "foundation/arkui/ace_engine" "master" || echo "⚠️ arkui_ace_engine download skipped"
-        download_repo "appexecfwk" "foundation/appexecfwk" "master" || download_repo "appexecfwk_standard" "foundation/appexecfwk" "master" || echo "⚠️ appexecfwk download skipped"
-        download_repo "arkui_napi" "foundation/arkui/napi" "master" || echo "⚠️ arkui_napi download skipped"
-        download_repo "hilog" "base/hiviewdfx/hilog" "master" || echo "⚠️ hilog download skipped"
-        download_repo "c_utils" "commonlibrary/c_utils" "master" || echo "⚠️ c_utils download skipped"
-        download_repo "graphic_2d" "foundation/graphic/graphic_2d" "master" || echo "⚠️ graphic_2d download skipped"
-        
-        if [ -d "foundation/arkui/ace_engine/frameworks" ] && [ -d "foundation/appexecfwk" ]; then
-          echo "✅ ArkUI-X dependencies download completed"
-          echo "DEPS_DOWNLOADED=true" >> $GITHUB_ENV
-        else
-          echo "⚠️ ArkUI-X dependencies not fully downloaded"
-        fi
-
-    - name: Setup directory structure
-      if: env.DEPS_DOWNLOADED == 'true'
-      run: |
-        echo "🔍 Setting up directory structure..."
-        
-        mkdir -p foundation/arkui/ace_engine/adapter/ios
-        
-        cd foundation/arkui/ace_engine/adapter/ios
-        
-        rm -f build capability entrance stage osal
-        
-        ln -s ../../../../../build build
-        ln -s ../../../../../capability capability
-        ln -s ../../../../../entrance entrance
-        ln -s ../../../../../stage stage
-        ln -s ../../../../../osal osal
-        
-        cd ../../../../../
-        
-        echo "✅ Directory structure set up"
-        
-        ls -la foundation/arkui/ace_engine/adapter/ios/
-
-    - name: Build libarkui_ios.a
-      id: build-lib
-      continue-on-error: true
-      if: env.DEPS_DOWNLOADED == 'true'
-      run: |
-        echo "🔍 Building libarkui_ios.a using GN/Ninja..."
-        
-        mkdir -p out/ios/Release-iphoneos
-        cd out/ios/Release-iphoneos
-        
-        gn gen . --args="target_os=\"ios\" target_cpu=\"arm64\" is_debug=false" --root=foundation/arkui/ace_engine
-        
-        ninja -j$(sysctl -n hw.ncpu) libarkui_ios 2>&1
-        
-        cd ../..
-        
-        LIB_PATH=$(find out/ios -name "libarkui_ios.a" 2>/dev/null | head -1)
-        
-        if [ -n "$LIB_PATH" ]; then
-          echo "✅ libarkui_ios.a built successfully"
-          ls -la "$LIB_PATH"
-          echo "LIBARKUI_PATH=$LIB_PATH" >> $GITHUB_ENV
-          echo "LIB_BUILT=true" >> $GITHUB_ENV
-        else
-          echo "❌ libarkui_ios.a build failed"
-          find out/ios -name "*.a" 2>/dev/null | head -10
-        fi
-
-    - name: Configure Xcode project for ArkUI-X
-      run: |
-        echo "🔍 Checking if libarkui_ios.a exists..."
-        
-        LIB_PATH=$(find out/ios -name "libarkui_ios.a" 2>/dev/null | head -1)
-        
-        if [ -n "$LIB_PATH" ]; then
-          echo "✅ libarkui_ios.a found at: $LIB_PATH"
-          echo "Configuring Xcode project for ArkUI-X..."
-          
-          sed -i '' 's/TARGETED_DEVICE_FAMILY = "1,2";/TARGETED_DEVICE_FAMILY = "1,2";\n\t\t\t\tHEADER_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/adapter/ios/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/frameworks/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/appexecfwk/**",\n\t\t\t\t\t"$(SRCROOT)\\/../base/**",\n\t\t\t\t\t"$(SRCROOT)\\/../commonlibrary/**",\n\t\t\t\t);\n\t\t\t\tLIBRARY_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../out/ios/Release-iphoneos/**",\n\t\t\t\t);\n\t\t\t\tOTHER_LDFLAGS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"-llibarkui_ios",\n\t\t\t\t\t"-lArkUIX",\n\t\t\t\t\t"-lACE",\n\t\t\t\t\t"-ObjC++",\n\t\t\t\t);/' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
-          
-          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
-          
-          echo "✅ Xcode project configured for ArkUI-X"
-        else
-          echo "⚠️ libarkui_ios.a not found, proceeding without ArkUI-X integration"
-        fi
-
-    - name: Build ArkUIPlayer
+    - name: Build ArkUIPlayer using xcodebuild
       run: |
         echo "🔍 Building ArkUIPlayer app..."
         
-        ls -la ArkUIPlayer/
-        ls -la ArkUIPlayer/ArkUIPlayer.xcodeproj/
+        cd ArkUIPlayer
         
-        mkdir -p build
-        
-        xcodebuild -project ArkUIPlayer/ArkUIPlayer.xcodeproj \
+        xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
           -destination 'generic/platform=iOS' \
-          -configuration Debug \
-          -derivedDataPath build \
-          build \
+          -configuration Release \
+          clean build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-          2>&1 | tee build_log.txt
+          IPHONEOS_DEPLOYMENT_TARGET=13.0
         
-        BUILD_EXIT_CODE=${PIPESTATUS[0]}
-        echo "Build exit code: $BUILD_EXIT_CODE"
+        echo "✅ Build completed"
         
-        APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+        find . -name "*.app" -type d 2>/dev/null
         
+        APP_PATH=$(find . -name "*.app" -type d | head -1)
         if [ -n "$APP_PATH" ]; then
-          echo "✅ ArkUIPlayer build completed"
           echo "Found .app at: $APP_PATH"
           ls -la "$APP_PATH/"
           du -sh "$APP_PATH"
         else
-          echo "❌ .app file not found! Attempting build without ArkUI-X..."
-          
-          echo "🔍 Reverting to stub mode..."
-          sed -i '' 's/#define HAS_ARKUI_X 1/#define HAS_ARKUI_X 0/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
-          
-          echo "Current HAPManager.h content:"
-          cat ArkUIPlayer/ArkUIPlayer/HAPManager.h | head -20
-          
-          rm -rf build
-          mkdir -p build
-          
-          xcodebuild -project ArkUIPlayer/ArkUIPlayer.xcodeproj \
-            -scheme ArkUIPlayer \
-            -destination 'generic/platform=iOS' \
-            -configuration Debug \
-            -derivedDataPath build \
-            build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            2>&1 | tee build_log_stub.txt
-          
-          APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-            echo "✅ ArkUIPlayer build completed (stub mode)"
-            echo "Found .app at: $APP_PATH"
-            ls -la "$APP_PATH/"
-            du -sh "$APP_PATH"
-          else
-            echo "❌ .app file not found in stub mode either!"
-            echo "Listing build directory:"
-            find build -type f -name "*.app" -o -name "*.dSYM" 2>/dev/null | head -20
-            exit 1
-          fi
+          echo "❌ .app file not found!"
+          exit 1
         fi
 
     - name: Package unsigned IPA manually
       run: |
         echo "🔍 Packaging unsigned IPA manually..."
         
-        echo "Searching for .app files..."
-        find build -name "*.app" -type d 2>/dev/null
+        cd ArkUIPlayer
         
-        APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+        APP_PATH=$(find . -name "*.app" -type d | head -1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "❌ .app file not found in default location!"
-          APP_PATH=$(find build -name "*.app" -type d | head -1)
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ .app file not found anywhere!"
-            exit 1
-          else
-            echo "Found .app at alternative location: $APP_PATH"
-          fi
-        else
-          echo "Found .app at: $APP_PATH"
+          echo "❌ .app file not found!"
+          exit 1
         fi
         
+        echo "Found .app at: $APP_PATH"
         ls -la "$APP_PATH/"
         du -sh "$APP_PATH"
         
         mkdir -p ArkUIPlayer-IPA/Payload
         cp -r "$APP_PATH" ArkUIPlayer-IPA/Payload/
         
-        echo "Listing Payload directory before zip:"
+        echo "Listing Payload directory:"
         ls -la ArkUIPlayer-IPA/Payload/
-        du -sh ArkUIPlayer-IPA/Payload/
         
         cd ArkUIPlayer-IPA
         zip -r ArkUIPlayer.ipa Payload/
@@ -357,18 +100,10 @@ jobs:
         
         ls -la ArkUIPlayer-IPA/
         du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa
-        
-        if [ ! -f ArkUIPlayer-IPA/ArkUIPlayer.ipa ]; then
-          echo "❌ IPA file not created!"
-          exit 1
-        fi
-        
-        IPA_SIZE=$(du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa | awk '{print $1}')
-        echo "IPA size: $IPA_SIZE"
 
     - name: Upload unsigned IPA
       uses: actions/upload-artifact@v4
       with:
         name: ArkUIPlayer-unsigned
-        path: ArkUIPlayer-IPA/ArkUIPlayer.ipa
+        path: ArkUIPlayer/ArkUIPlayer-IPA/ArkUIPlayer.ipa
         retention-days: 7
