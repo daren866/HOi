@@ -1,5 +1,9 @@
 #import "HAPManager.h"
+
+#if HAS_ARKUI_X
 #import "StageApplication.h"
+#endif
+
 #import <spawn.h>
 #import <sys/wait.h>
 
@@ -42,9 +46,11 @@ static HAPManager *_sharedInstance = nil;
         return;
     }
     
+#if HAS_ARKUI_X
     NSString *bundleDirectory = [[NSBundle mainBundle] bundlePath];
     [StageApplication configModuleWithBundleDirectory:bundleDirectory];
     [StageApplication launchApplication];
+#endif
     
     self.isInitialized = YES;
 }
@@ -93,9 +99,11 @@ static HAPManager *_sharedInstance = nil;
         
         self.currentHAPPath = hapPath;
         
+#if HAS_ARKUI_X
         [StageApplication loadModule:@"entry" entryFile:@"index.ets"];
+#endif
         
-        dispatch_async(dispatch_get_main_queue(), ^{
+        dispatch_async(dispatch_get_main_queue(), {
             completion(YES, nil);
         });
     });
@@ -311,15 +319,21 @@ static HAPManager *_sharedInstance = nil;
 }
 
 - (void)callCurrentAbilityOnForeground {
+#if HAS_ARKUI_X
     [StageApplication callCurrentAbilityOnForeground];
+#endif
 }
 
 - (void)callCurrentAbilityOnBackground {
+#if HAS_ARKUI_X
     [StageApplication callCurrentAbilityOnBackground];
+#endif
 }
 
 - (void)unloadCurrentHAP {
+#if HAS_ARKUI_X
     [StageApplication releaseViewControllers];
+#endif
     
     NSFileManager *fm = [NSFileManager defaultManager];
     

@@ -1,8 +1,15 @@
 #import <UIKit/UIKit.h>
 #import "HAPManager.h"
-#import "StageViewController.h"
 
+#if HAS_ARKUI_X
+#import "StageViewController.h"
+#endif
+
+#if HAS_ARKUI_X
 @interface HAPPlayerViewController : StageViewController
+#else
+@interface HAPPlayerViewController : UIViewController
+#endif
 
 @property (nonatomic, strong) HAPManager *hapManager;
 @property (nonatomic, strong) NSString *bundleName;

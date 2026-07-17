@@ -259,25 +259,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.ArkUIPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = "1,2";
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../foundation/arkui/ace_engine/adapter/ios/**",
-					"$(SRCROOT)/../foundation/arkui/ace_engine/frameworks/**",
-					"$(SRCROOT)/../foundation/appexecfwk/**",
-					"$(SRCROOT)/../base/**",
-					"$(SRCROOT)/../commonlibrary/**",
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/../out/ios/Release-iphoneos/**",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-llibarkui_ios",
-					"-lArkUIX",
-					"-lACE",
-					"-ObjC++",
-				);
 			};
 			name = Debug;
 		};

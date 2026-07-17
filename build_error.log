@@ -1,0 +1,8 @@
+﻿gh : failed to get run: HTTP 404: Not Found (https://api.github.com/repos/daren866/HOi/actions/runs/87803920297?exclude
+_pull_requests=true)
+At line:15 char:6142
++ ... ster\arkui_for_ios-master; gh run view 87803920297 --log 2>&1 | Out-F ...
++                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (failed to get r..._requests=true):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

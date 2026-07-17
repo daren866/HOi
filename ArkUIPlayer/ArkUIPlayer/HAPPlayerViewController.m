@@ -7,8 +7,12 @@
 @implementation HAPPlayerViewController
 
 - (instancetype)initWithHAPManager:(HAPManager *)manager bundleName:(NSString *)bundleName {
+#if HAS_ARKUI_X
     NSString *instanceName = [NSString stringWithFormat:@"%@:entry:MainAbility", bundleName ?: @"com.example.hap"];
     self = [super initWithInstanceName:instanceName];
+#else
+    self = [super init];
+#endif
     if (self) {
         self.hapManager = manager;
         self.bundleName = bundleName ?: @"com.example.hap";

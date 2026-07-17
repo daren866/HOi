@@ -1,0 +1,101 @@
+In file included from /Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/AppDelegate.m:2:
+In file included from /Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/HAPManager.h:2:
+In file included from /Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageApplication.h:20:
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:24:42: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+   24 | @property (nonatomic, readonly) NSString *instanceName;
+      |                                          ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:24:42: note: insert '_Nullable' if the pointer may be null
+   24 | @property (nonatomic, readonly) NSString *instanceName;
+      |                                          ^
+      |                                            _Nullable 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:24:42: note: insert '_Nonnull' if the pointer should never be null
+   24 | @property (nonatomic, readonly) NSString *instanceName;
+      |                                          ^
+      |                                            _Nonnull 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:55:4: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+   55 | - (id)getBridgeManager;
+      |    ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:55:4: note: insert '_Nullable' if the pointer may be null
+   55 | - (id)getBridgeManager;
+      |    ^ 
+      |       _Nullable 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:55:4: note: insert '_Nonnull' if the pointer should never be null
+   55 | - (id)getBridgeManager;
+      |    ^ 
+      |       _Nonnull 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:61:5: warning: declaration is marked with '@deprecated' command but does not have a deprecation attribute [-Wdocumentation-deprecated-sync]
+   61 |  * @deprecated since 11
+      |    ~^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:77:29: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+   77 | - (void)addPlugin:(NSString *)pluginName;
+      |                             ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:77:29: note: insert '_Nullable' if the pointer may be null
+   77 | - (void)addPlugin:(NSString *)pluginName;
+      |                             ^
+      |                              _Nullable
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:77:29: note: insert '_Nonnull' if the pointer should never be null
+   77 | - (void)addPlugin:(NSString *)pluginName;
+      |                             ^
+      |                              _Nonnull
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:88:4: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+   88 | - (id)getPluginContext;
+      |    ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:88:4: note: insert '_Nullable' if the pointer may be null
+   88 | - (id)getPluginContext;
+      |    ^ 
+      |       _Nullable 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:88:4: note: insert '_Nonnull' if the pointer should never be null
+   88 | - (id)getPluginContext;
+      |    ^ 
+      |       _Nonnull 
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:99:68: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+   99 | - (void)registerPlatformViewFactory:(NSObject<PlatformViewFactory> *)platformViewFactory;
+      |                                                                    ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:99:68: note: insert '_Nullable' if the pointer may be null
+   99 | - (void)registerPlatformViewFactory:(NSObject<PlatformViewFactory> *)platformViewFactory;
+      |                                                                    ^
+      |                                                                     _Nullable
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:99:68: note: insert '_Nonnull' if the pointer should never be null
+   99 | - (void)registerPlatformViewFactory:(NSObject<PlatformViewFactory> *)platformViewFactory;
+      |                                                                    ^
+      |                                                                     _Nonnull
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:97:5: warning: '@return' command used in a comment that is attached to a method returning void [-Wdocumentation]
+   97 |  * @return void
+      |    ~^~~~~~~~~~~
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:106:44: warning: pointer is missing a nullability type specifier (_Nonnull, _Nullable, or _Null_unspecified) [-Wnullability-completeness]
+  106 | - (void) saveDumpFile:(NSArray<NSString *> *)dumpParams;
+      |                                            ^
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:106:44: note: insert '_Nullable' if the pointer may be null
+  106 | - (void) saveDumpFile:(NSArray<NSString *> *)dumpParams;
+      |                                            ^
+      |                                             _Nullable
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:106:44: note: insert '_Nonnull' if the pointer should never be null
+  106 | - (void) saveDumpFile:(NSArray<NSString *> *)dumpParams;
+      |                                            ^
+      |                                             _Nonnull
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer/../../stage/ability/StageViewController.h:104:5: warning: '@return' command used in a comment that is attached to a method returning void [-Wdocumentation]
+  104 |  * @return void
+      |    ~^~~~~~~~~~~
+9 warnings generated.
+
+Ld /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Products/Debug-iphoneos/ArkUIPlayer.app/ArkUIPlayer normal (in target 'ArkUIPlayer' from project 'ArkUIPlayer')
+    cd /Users/runner/work/HOi/HOi/ArkUIPlayer
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios13.0 -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -O0 -L/Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphoneos -L/Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Products/Debug-iphoneos -F/Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphoneos -F/Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Products/Debug-iphoneos -filelist /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Intermediates.noindex/ArkUIPlayer.build/Debug-iphoneos/ArkUIPlayer.build/Objects-normal/arm64/ArkUIPlayer.LinkFileList -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Intermediates.noindex/ArkUIPlayer.build/Debug-iphoneos/ArkUIPlayer.build/Objects-normal/arm64/ArkUIPlayer_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Intermediates.noindex/ArkUIPlayer.build/Debug-iphoneos/ArkUIPlayer.build/Objects-normal/arm64/ArkUIPlayer_dependency_info.dat -fobjc-arc -fobjc-link-runtime -o /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Products/Debug-iphoneos/ArkUIPlayer.app/ArkUIPlayer
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer.xcodeproj: ArkUIPlayer: ld: warning: Could not find or use auto-linked framework 'UIUtilities': framework 'UIUtilities' not found
+Undefined symbols for architecture arm64:
+  "_OBJC_CLASS_$_StageApplication", referenced from:
+       in HAPManager.o
+  "_OBJC_CLASS_$_StageViewController", referenced from:
+      _OBJC_CLASS_$_HAPPlayerViewController in HAPPlayerViewController.o
+  "_OBJC_METACLASS_$_StageViewController", referenced from:
+      _OBJC_METACLASS_$_HAPPlayerViewController in HAPPlayerViewController.o
+ld: symbol(s) not found for architecture arm64
+/Users/runner/work/HOi/HOi/ArkUIPlayer/ArkUIPlayer.xcodeproj: ArkUIPlayer: clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	Ld /Users/runner/Library/Developer/Xcode/DerivedData/ArkUIPlayer-cpguuqgkiwlgslbauwfttorinnyv/Build/Products/Debug-iphoneos/ArkUIPlayer.app/ArkUIPlayer normal (in target 'ArkUIPlayer' from project 'ArkUIPlayer')
+	Building project ArkUIPlayer with scheme ArkUIPlayer and configuration Debug
+(2 failures)

@@ -1,9 +1,10 @@
 #import <Foundation/Foundation.h>
-#import "../stage/ability/StageApplication.h"
 
 typedef void (^HAPLoadCompletion)(BOOL success, NSString *errorMessage);
 typedef void (^HAPListCompletion)(NSArray<NSDictionary *> *hapInfoList, NSError *error);
 typedef void (^HAPInfoCompletion)(NSString *appName, NSString *bundleName, NSError *error);
+
+#define HAS_ARKUI_X 0
 
 @interface HAPManager : NSObject
 
