@@ -231,21 +231,16 @@ jobs:
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
             
-            if [ -d "$HEADER_PATH" ]; then
-              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS \"\$(SRCROOT)/$HEADER_PATH\" \"\$(SRCROOT)/$HEADER_PATH_SIM\""
-            fi
-            
             OTHER_LDFLAGS="$OTHER_LDFLAGS -framework $FW_NAME"
           done
           
-          LIBRARY_SEARCH_PATHS="\"$(SRCROOT)/$FRAMEWORK_DIR\""
+          LIBRARY_SEARCH_PATHS="."
         fi
         
-        echo "Header search paths: $HEADER_SEARCH_PATHS"
         echo "Library search paths: $LIBRARY_SEARCH_PATHS"
         echo "Other LDFlags: $OTHER_LDFLAGS"
         
-        BUILD_CMD="xcodebuild -project ArkUIPlayer.xcodeproj \
+        xcodebuild -project ArkUIPlayer.xcodeproj \
           -scheme ArkUIPlayer \
           -destination 'generic/platform=iOS' \
           -configuration Release \
@@ -254,22 +249,9 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY='' \
-          IPHONEOS_DEPLOYMENT_TARGET=13.0"
-        
-        if [ -n "$HEADER_SEARCH_PATHS" ]; then
-          BUILD_CMD="$BUILD_CMD HEADER_SEARCH_PATHS=$HEADER_SEARCH_PATHS"
-        fi
-        if [ -n "$LIBRARY_SEARCH_PATHS" ]; then
-          BUILD_CMD="$BUILD_CMD LIBRARY_SEARCH_PATHS=$LIBRARY_SEARCH_PATHS"
-        fi
-        if [ -n "$OTHER_LDFLAGS" ]; then
-          BUILD_CMD="$BUILD_CMD OTHER_LDFLAGS=\"\$(inherited) $OTHER_LDFLAGS\""
-        fi
-        
-        echo "Running build command:"
-        echo "$BUILD_CMD"
-        
-        eval "$BUILD_CMD" 2>&1 || { echo "❌ Build failed"; exit 1; }
+          IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+          LIBRARY_SEARCH_PATHS="$LIBRARY_SEARCH_PATHS" \
+          OTHER_LDFLAGS="\$(inherited) $OTHER_LDFLAGS" 2>&1 || { echo "❌ Build failed"; exit 1; }
         
         echo "✅ Build completed"
         
