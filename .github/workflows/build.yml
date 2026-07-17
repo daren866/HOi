@@ -63,32 +63,46 @@ jobs:
         
         if ! command -v gn &> /dev/null; then
           echo "Installing GN..."
-          GN_URLS=(
-            "https://github.com/acgtyrant/gn-build/releases/download/v0.1.0/gn-macos-amd64.zip"
-            "https://github.com/rui314/gn/releases/download/20240301/gn-macos.zip"
-            "https://github.com/nicocha30/gn-build/releases/download/gn-v0.1.0/gn-macos-x86_64.zip"
-          )
           
-          for url in "${GN_URLS[@]}"; do
-            echo "Trying: $url"
-            if curl -L "$url" -o gn.zip --fail; then
-              if unzip -o gn.zip -d /usr/local/bin/ 2>/dev/null; then
-                rm gn.zip
-                break
+          if brew install gn 2>/dev/null; then
+            echo "✅ GN installed via brew"
+          else
+            echo "⚠️ Brew install failed, trying prebuilt binaries..."
+            
+            GN_URLS=(
+              "https://github.com/nicocha30/gn-build/releases/download/gn-v0.2455.9b987f0/gn-macos-x86_64.zip"
+              "https://storage.googleapis.com/chrome-infra-packages/gn/mac-amd64/gn.zip"
+            )
+            
+            for url in "${GN_URLS[@]}"; do
+              echo "Trying: $url"
+              if curl -L "$url" -o gn.zip --fail --max-time 30; then
+                file_type=$(file -b gn.zip)
+                echo "File type: $file_type"
+                if echo "$file_type" | grep -q -i "zip"; then
+                  unzip -o gn.zip -d /usr/local/bin/ 2>/dev/null
+                  rm gn.zip
+                  if command -v gn &> /dev/null; then
+                    echo "✅ GN installed from $url"
+                    break
+                  fi
+                else
+                  echo "⚠️ Not a valid zip file, skipping"
+                  rm gn.zip
+                fi
               fi
+            done
+            
+            if ! command -v gn &> /dev/null; then
+              echo "❌ Failed to download GN, building from source..."
+              git clone --depth 1 https://gn.googlesource.com/gn.git gn_source
+              cd gn_source
+              python3 build/gen.py
+              ninja -C out
+              cp out/gn /usr/local/bin/
+              cd ..
+              rm -rf gn_source
             fi
-            rm -f gn.zip
-          done
-          
-          if ! command -v gn &> /dev/null; then
-            echo "❌ Failed to download GN, building from source..."
-            git clone https://gn.googlesource.com/gn.git gn_source
-            cd gn_source
-            python3 build/gen.py
-            ninja -C out
-            cp out/gn /usr/local/bin/
-            cd ..
-            rm -rf gn_source
           fi
         fi
         
