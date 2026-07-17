@@ -240,6 +240,9 @@ jobs:
             echo "📁 XCFramework internal structure:"
             ls -la "$FRAMEWORK_DIR/$fw/"
             
+            echo "📁 ios-arm64 directory contents:"
+            ls -la "$FRAMEWORK_DIR/$fw/ios-arm64/"
+            
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
             
