@@ -230,15 +230,23 @@ jobs:
         fi
 
     - name: Configure Xcode project for ArkUI-X
-      if: env.LIB_BUILT == 'true'
       run: |
-        echo "🔍 Configuring Xcode project for ArkUI-X..."
+        echo "🔍 Checking if libarkui_ios.a exists..."
         
-        sed -i '' 's/TARGETED_DEVICE_FAMILY = "1,2";/TARGETED_DEVICE_FAMILY = "1,2";\n\t\t\t\tHEADER_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/adapter/ios/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/frameworks/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/appexecfwk/**",\n\t\t\t\t\t"$(SRCROOT)\\/../base/**",\n\t\t\t\t\t"$(SRCROOT)\\/../commonlibrary/**",\n\t\t\t\t);\n\t\t\t\tLIBRARY_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../out/ios/Release-iphoneos/**",\n\t\t\t\t);\n\t\t\t\tOTHER_LDFLAGS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"-llibarkui_ios",\n\t\t\t\t\t"-lArkUIX",\n\t\t\t\t\t"-lACE",\n\t\t\t\t\t"-ObjC++",\n\t\t\t\t);/' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
+        LIB_PATH=$(find out/ios -name "libarkui_ios.a" 2>/dev/null | head -1)
         
-        sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
-        
-        echo "✅ Xcode project configured for ArkUI-X"
+        if [ -n "$LIB_PATH" ]; then
+          echo "✅ libarkui_ios.a found at: $LIB_PATH"
+          echo "Configuring Xcode project for ArkUI-X..."
+          
+          sed -i '' 's/TARGETED_DEVICE_FAMILY = "1,2";/TARGETED_DEVICE_FAMILY = "1,2";\n\t\t\t\tHEADER_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/adapter/ios/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/arkui/ace_engine/frameworks/**",\n\t\t\t\t\t"$(SRCROOT)\\/../foundation/appexecfwk/**",\n\t\t\t\t\t"$(SRCROOT)\\/../base/**",\n\t\t\t\t\t"$(SRCROOT)\\/../commonlibrary/**",\n\t\t\t\t);\n\t\t\t\tLIBRARY_SEARCH_PATHS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"$(SRCROOT)\\/../out/ios/Release-iphoneos/**",\n\t\t\t\t);\n\t\t\t\tOTHER_LDFLAGS = (\n\t\t\t\t\t"$(inherited)",\n\t\t\t\t\t"-llibarkui_ios",\n\t\t\t\t\t"-lArkUIX",\n\t\t\t\t\t"-lACE",\n\t\t\t\t\t"-ObjC++",\n\t\t\t\t);/' ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
+          
+          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
+          
+          echo "✅ Xcode project configured for ArkUI-X"
+        else
+          echo "⚠️ libarkui_ios.a not found, proceeding without ArkUI-X integration"
+        fi
 
     - name: Build ArkUIPlayer
       run: |
