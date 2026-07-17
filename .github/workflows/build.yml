@@ -231,9 +231,16 @@ jobs:
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
             
+            echo "Checking header path: $HEADER_PATH"
             if [ -d "$HEADER_PATH" ]; then
+              echo "✅ Header path exists"
+              echo "📋 Headers in framework:"
+              ls -la "$HEADER_PATH/"
               HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH"
+            else
+              echo "❌ Header path does not exist"
             fi
+            
             if [ -d "$HEADER_PATH_SIM" ]; then
               HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH_SIM"
             fi
