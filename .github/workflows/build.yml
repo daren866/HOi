@@ -38,6 +38,9 @@ jobs:
       run: |
         echo "🔍 Cleaning workspace..."
         rm -rf foundation base commonlibrary out build ArkUIPlayer.xcarchive ArkUIPlayer-IPA
+        
+        echo "🔍 Restoring clean project.pbxproj file..."
+        git checkout -- ArkUIPlayer/ArkUIPlayer.xcodeproj/project.pbxproj
 
     - name: Install system dependencies
       run: |
