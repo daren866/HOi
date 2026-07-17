@@ -45,42 +45,31 @@ jobs:
         brew install wget gnu-tar 2>/dev/null || true
         echo "✅ System dependencies installed"
 
-    - name: Install Node.js and ACE Tools
+    - name: Setup Node.js 16
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
+        cache: 'npm'
+
+    - name: Install ACE Tools
       run: |
-        echo "🔍 Installing Node.js and ACE Tools..."
-        
-        if ! command -v node &> /dev/null; then
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm install 16
-          nvm use 16
-        fi
-        
-        echo "Node.js version: $(node --version)"
-        echo "npm version: $(npm --version)"
-        
-        npm install -g @arkui-x/ace-tools 2>&1 || true
+        echo "🔍 Installing ACE Tools..."
+        npm install -g @arkui-x/ace-tools 2>&1 || npm install -g @arkui-x/ace-cli 2>&1 || true
         
         if command -v ace &> /dev/null; then
           echo "✅ ACE Tools installed: $(ace --version)"
         else
-          echo "⚠️ ACE Tools installation failed, trying alternative..."
-          npm install -g @arkui-x/ace-cli 2>&1 || true
+          echo "⚠️ ACE Tools installation failed"
         fi
 
     - name: Download ArkUI-X SDK using ACE Tools
       continue-on-error: true
       run: |
-        echo "🔍 Downloading ArkUI-X SDK..."
-        
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        nvm use 16
+        echo "🔍 Downloading ArkUI-X SDK using ACE Tools..."
         
         if command -v ace &> /dev/null; then
-          echo "Using ACE Tools to download SDK..."
-          ace sdk install 2>&1 || true
+          echo "Using ACE Tools to install SDK..."
+          ace sdk install 2>&1 || ace sdk install --version 1.0.0 2>&1 || true
         fi
         
         SDK_DIR="$HOME/Library/ArkUI-X/Sdk"
@@ -89,15 +78,16 @@ jobs:
         
         find "$SDK_DIR" -name "libarkui_ios*" 2>/dev/null || echo "libarkui_ios not found in SDK"
 
-    - name: Download ArkUI-X SDK manually
+    - name: Download ArkUI-X SDK from GitCode releases
       continue-on-error: true
       run: |
-        echo "🔍 Downloading ArkUI-X SDK manually..."
+        echo "🔍 Downloading ArkUI-X SDK from GitCode releases..."
         
         SDK_URLS=(
-          "https://repo.huaweicloud.com/arkui-x/sdk/10/arkui-x/arkui-x_darwin_x64_10.0.0.0_Release.zip"
-          "https://gitee.com/arkui-x/arkui-x/releases/download/1.0.0.0/arkui-x_darwin_x64_1.0.0.0_Release.zip"
-          "https://gitee.com/openharmony-sig/arkui_ace_engine/releases/download/10.0.0.0/arkui-x_darwin_x64_10.0.0.0_Release.zip"
+          "https://gitcode.com/arkui-x/build_plugins/releases/download/v1.0.0/arkui-x_darwin_x64_1.0.0.0_Release.zip"
+          "https://gitcode.com/arkui-x/arkui_for_ios/releases/download/v1.0.0/libarkui_ios.xcframework.zip"
+          "https://github.com/arkui-x/arkui_for_ios/releases/download/v1.0.0/libarkui_ios.xcframework.zip"
+          "https://gitee.com/arkui-x/arkui_for_ios/releases/download/v1.0.0/libarkui_ios.xcframework.zip"
         )
         
         for url in "${SDK_URLS[@]}"; do
@@ -116,6 +106,41 @@ jobs:
               break
             else
               echo "⚠️ Not a valid zip file, skipping"
+              rm arkui-x-sdk.zip
+            fi
+          else
+            echo "⚠️ Download failed: $url"
+          fi
+        done
+
+    - name: Download ArkUI-X SDK from Huawei repo
+      continue-on-error: true
+      run: |
+        echo "🔍 Downloading ArkUI-X SDK from Huawei repository..."
+        
+        SDK_URLS=(
+          "https://repo.huaweicloud.com/openharmony/arkui-x/1.0.0/arkui-x_darwin_x64_1.0.0.0_Release.zip"
+          "https://repo.huaweicloud.com/openharmony/arkui-x/1.1.0/arkui-x_darwin_x64_1.1.0.0_Release.zip"
+          "https://repo.huaweicloud.com/openharmony/arkui-x/1.1.6/arkui-x_darwin_x64_1.1.6.0_Release.zip"
+        )
+        
+        for url in "${SDK_URLS[@]}"; do
+          echo "Trying: $url"
+          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 120; then
+            file_size=$(wc -c < arkui-x-sdk.zip)
+            echo "File size: $file_size bytes"
+            if [ "$file_size" -gt 1000000 ]; then
+              echo "✅ Downloaded large file, unzipping..."
+              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1 || true
+              rm arkui-x-sdk.zip
+              
+              find arkui-x-sdk -name "libarkui_ios*" 2>/dev/null
+              find arkui-x-sdk -name "*.xcframework" 2>/dev/null
+              
+              echo "✅ SDK downloaded successfully"
+              break
+            else
+              echo "⚠️ File too small (HTML redirect?), skipping"
               rm arkui-x-sdk.zip
             fi
           else
