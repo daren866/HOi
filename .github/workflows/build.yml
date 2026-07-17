@@ -366,14 +366,28 @@ jobs:
         brew install gn 2>/dev/null || true
         
         if ! command -v gn &> /dev/null; then
-          echo "⚠️ GN not found via brew, building from source..."
-          git clone --depth 1 https://gn.googlesource.com/gn.git gn_source
-          cd gn_source
-          python3 build/gen.py
-          ninja -C out
-          cp out/gn /usr/local/bin/
-          cd ..
-          rm -rf gn_source
+          echo "⚠️ GN not found via brew, downloading prebuilt binary..."
+          curl -L https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip -o ninja.zip
+          unzip -o ninja.zip -d /usr/local/bin/
+          rm ninja.zip
+          
+          curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/git_revision:e98d0cd0a8b9a5940687a19c2c19137038675e61 -o gn.zip || \
+            curl -L https://github.com/acgtyrant/gn-build/releases/download/v0.1.0/gn-macos-amd64.zip -o gn.zip || \
+            curl -L https://github.com/rui314/gn/releases/download/20240301/gn-macos.zip -o gn.zip
+          
+          if [ -f gn.zip ]; then
+            unzip -o gn.zip -d /usr/local/bin/
+            rm gn.zip
+          else
+            echo "⚠️ Failed to download GN, building from source..."
+            git clone https://gn.googlesource.com/gn.git gn_source
+            cd gn_source
+            python3 build/gen.py
+            ninja -C out
+            cp out/gn /usr/local/bin/
+            cd ..
+            rm -rf gn_source
+          fi
         fi
         
         if command -v gn &> /dev/null; then
