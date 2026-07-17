@@ -103,7 +103,7 @@ static HAPManager *_sharedInstance = nil;
         [StageApplication loadModule:@"entry" entryFile:@"index.ets"];
 #endif
         
-        dispatch_async(dispatch_get_main_queue(), {
+        dispatch_async(dispatch_get_main_queue(), ^{
             completion(YES, nil);
         });
     });
