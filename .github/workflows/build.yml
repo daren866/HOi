@@ -23,7 +23,7 @@ jobs:
   build-app:
     name: Build ArkUIPlayer App
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
     - name: Checkout code
@@ -77,7 +77,8 @@ jobs:
           echo "Checking URL availability..."
           curl -sI "$url" | head -5
           
-          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 300; then
+          echo "Starting download with wget (supports resume)... "
+          if wget -c "$url" -O arkui-x-sdk.zip --timeout=60 --tries=5 --waitretry=10; then
             file_size=$(wc -c < arkui-x-sdk.zip)
             echo "File size: $file_size bytes"
             
@@ -98,7 +99,31 @@ jobs:
               rm arkui-x-sdk.zip
             fi
           else
-            echo "⚠️ Download failed: $url"
+            echo "⚠️ wget download failed, trying curl..."
+            
+            if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 900 --retry 3 --retry-delay 5 --continue-at -; then
+              file_size=$(wc -c < arkui-x-sdk.zip)
+              echo "File size: $file_size bytes"
+              
+              if [ "$file_size" -gt 1000000 ]; then
+                echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
+                unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
+                rm arkui-x-sdk.zip
+                
+                echo "📁 SDK directory contents:"
+                ls -la arkui-x-sdk/ 2>/dev/null || echo "arkui-x-sdk directory is empty"
+                find arkui-x-sdk -type f | head -50
+                
+                echo "✅ SDK downloaded successfully"
+                DOWNLOAD_SUCCESS=1
+                break
+              else
+                echo "⚠️ File too small ($file_size bytes), skipping"
+                rm arkui-x-sdk.zip
+              fi
+            else
+              echo "⚠️ Download failed: $url"
+            fi
           fi
         done
         
