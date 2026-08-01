@@ -213,8 +213,9 @@ jobs:
 
     - name: Build ArkUIPlayer using xcodebuild
       run: |
+        set -o pipefail
         echo "🔍 Building ArkUIPlayer app..."
-        
+
         cd ArkUIPlayer
         
         echo "📁 Current directory:"
@@ -348,6 +349,39 @@ jobs:
           ls -la "$APP_PATH/"
           ls -la "$APP_PATH/Frameworks/" 2>/dev/null || echo "(no Frameworks/ inside app)"
           du -sh "$APP_PATH"
+
+          # ===== 主二进制存在性校验(TrollStore error 303 的根因排查) =====
+          # 从 Info.plist 中读取 CFBundleExecutable 的实际值,确认主二进制文件在 .app 内存在,
+          # 否则 IPA 上传后 TrollStore 会报 303 "Unable to locate main binary inside app bundle"。
+          echo "🔍 Verifying main binary inside .app..."
+          MAIN_BIN_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist" 2>/dev/null || echo "")
+          if [ -z "$MAIN_BIN_NAME" ]; then
+            echo "❌ CFBundleExecutable missing or Info.plist not processed (still contains \$(EXECUTABLE_NAME))"
+            echo "📋 Info.plist contents:"
+            cat "$APP_PATH/Info.plist"
+            exit 1
+          fi
+          echo "  CFBundleExecutable = $MAIN_BIN_NAME"
+
+          MAIN_BIN_PATH="$APP_PATH/$MAIN_BIN_NAME"
+          if [ ! -f "$MAIN_BIN_PATH" ]; then
+            echo "❌ Main binary not found at: $MAIN_BIN_PATH"
+            echo "📋 .app contents:"
+            ls -la "$APP_PATH/"
+            exit 1
+          fi
+
+          echo "  Main binary exists: $MAIN_BIN_PATH"
+          echo "  File type: $(file "$MAIN_BIN_PATH")"
+          if command -v lipo >/dev/null 2>&1; then
+            echo "  Architectures: $(lipo -info "$MAIN_BIN_PATH" 2>/dev/null | tail -1)"
+            # 必须包含 arm64 切片,TrollStore 在 arm64 设备上安装 armv7-only 包会失败。
+            if ! lipo -info "$MAIN_BIN_PATH" 2>/dev/null | grep -q arm64; then
+              echo "❌ Main binary does NOT contain arm64 slice!"
+              exit 1
+            fi
+          fi
+          echo "✅ Main binary verified (arm64 present)"
         else
           echo "❌ .app file not found!"
           exit 1
@@ -355,34 +389,63 @@ jobs:
 
     - name: Package unsigned IPA manually
       run: |
+        set -o pipefail
         echo "🔍 Packaging unsigned IPA manually..."
-        
+
         cd ArkUIPlayer
-        
+
         APP_PATH=$(find build -name "*.app" -type d | head -1)
-        
+
         if [ -z "$APP_PATH" ]; then
           echo "❌ .app file not found!"
           exit 1
         fi
-        
+
         echo "Found .app at: $APP_PATH"
         ls -la "$APP_PATH/"
         du -sh "$APP_PATH"
-        
+
+        # 打包前再次校验主二进制存在(防止 framework 嵌入步骤意外破坏 .app 结构)。
+        MAIN_BIN_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist" 2>/dev/null || echo "")
+        if [ -z "$MAIN_BIN_NAME" ] || [ ! -f "$APP_PATH/$MAIN_BIN_NAME" ]; then
+          echo "❌ Main binary '$MAIN_BIN_NAME' missing before IPA packaging!"
+          exit 1
+        fi
+        echo "✅ Pre-package check: main binary '$MAIN_BIN_NAME' OK"
+
         mkdir -p ArkUIPlayer-IPA/Payload
         cp -r "$APP_PATH" ArkUIPlayer-IPA/Payload/
-        
+
         echo "Listing Payload directory:"
         ls -la ArkUIPlayer-IPA/Payload/
-        
+
+        # 校验拷贝到 Payload 后主二进制依然存在。
+        PAYLOAD_APP=$(find ArkUIPlayer-IPA/Payload -name "*.app" -type d | head -1)
+        if [ ! -f "$PAYLOAD_APP/$MAIN_BIN_NAME" ]; then
+          echo "❌ Main binary missing in Payload after copy!"
+          exit 1
+        fi
+        echo "✅ Payload check: $PAYLOAD_APP/$MAIN_BIN_NAME OK"
+
         cd ArkUIPlayer-IPA
         zip -r ArkUIPlayer.ipa Payload/
         cd ..
-        
+
         echo "✅ Unsigned IPA packaged successfully"
-        
+
         ls -la ArkUIPlayer-IPA/
+        du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa
+
+        # ===== IPA 结构诊断 =====
+        # 解压 IPA 检查最终产物结构,TrollStore error 303 排查的关键日志。
+        echo ""
+        echo "🔍 IPA structure diagnostic:"
+        unzip -l ArkUIPlayer-IPA/ArkUIPlayer.ipa | head -40
+        echo ""
+        echo "🔍 Verifying IPA contains main binary..."
+        unzip -p ArkUIPlayer-IPA/ArkUIPlayer.ipa "Payload/ArkUIPlayer.app/$MAIN_BIN_NAME" > /dev/null 2>&1 \
+          && echo "✅ Main binary present in IPA" \
+          || { echo "❌ Main binary MISSING from IPA!"; exit 1; }
         du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa
 
     - name: Prepare release metadata
