@@ -1,4 +1,27 @@
-HEADER_SEARCH_PATHS = $(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers
-LIBRARY_SEARCH_PATHS = $(SRCROOT)/Frameworks
-OTHER_LDFLAGS = $(inherited) -framework libarkui_ios
+// ArkUI-X 集成用覆盖配置文件
+// 本地构建:需先把官方 SDK 中的 libarkui_ios.xcframework 复制到 ArkUIPlayer/Frameworks/ 目录下;
+// CI 构建:工作流会在运行时重写此文件,以下字段作为本地默认/兜底值。
+
+// ArkUI-X framework 公开头文件路径(真机 + 模拟器切片)
+HEADER_SEARCH_PATHS = $(inherited) "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers" "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator/libarkui_ios.framework/Headers"
+
+// 链接器定位 xcframework 内的 libarkui_ios.framework 二进制(区分真机/模拟器切片)
+FRAMEWORK_SEARCH_PATHS = $(inherited) "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64" "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator"
+
+// 通用的库/资源搜索路径
+LIBRARY_SEARCH_PATHS = $(inherited) $(SRCROOT)/Frameworks
+
+// 动态 framework 的 @rpath 查找范围(运行时 app 会从 Frameworks/ 子目录里加载 ArkUI)
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+
+// 链接 ArkUI 主库 + 系统依赖库:
+// -ObjC:保证 ObjC 分类符号进包(StageApplication / StageViewController 等 ArkUI ObjC API)
+// -lc++ : ArkUI-X 运行时大量使用 C++ 标准库(ace_engine/osal/capability 等 C++ 实现)
+// Foundation/UIKit/QuartzCore/CoreGraphics/Metal/MetalKit:视图、渲染、动画基础依赖
+// CoreText/ImageIO:文字绘制、图片解码(osal/image_source_ios、resource_convertor 等)
+// CFNetwork/AVFoundation/WebKit:网络、视频、Web 能力(capability/web、capability/video)
+// Combine/UserNotifications:响应式编程以及系统通知
+OTHER_LDFLAGS = $(inherited) -ObjC -lc++ -framework libarkui_ios -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework Metal -framework MetalKit -framework CoreText -framework ImageIO -framework CFNetwork -framework AVFoundation -framework WebKit -framework Combine -framework UserNotifications
+
+// ArkUI 公开头里有大量非 null 标注,避免编译时出现大量 nullability 告警。
 WARNING_CFLAGS = -Wno-nullability-completeness
