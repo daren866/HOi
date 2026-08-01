@@ -24,6 +24,9 @@ jobs:
     name: Build ArkUIPlayer App
     runs-on: macos-latest
     timeout-minutes: 180
+    # 创建 Release 需要写仓库内容的权限。
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -382,9 +385,34 @@ jobs:
         ls -la ArkUIPlayer-IPA/
         du -sh ArkUIPlayer-IPA/ArkUIPlayer.ipa
 
-    - name: Upload unsigned IPA
-      uses: actions/upload-artifact@v4
+    - name: Prepare release metadata
+      id: relmeta
+      run: |
+        # 用 仓库短 SHA + GitHub run number 组成唯一 tag,确保每次构建都能生成独立的 Release。
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        TAG="v1.0.${{ github.run_number }}-${SHORT_SHA}"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "name=ArkUIPlayer $TAG" >> "$GITHUB_OUTPUT"
+        echo "📋 Release tag: $TAG"
+
+    - name: Upload IPA to GitHub Releases
+      uses: softprops/action-gh-release@v2
       with:
-        name: ArkUIPlayer-unsigned
-        path: ArkUIPlayer/ArkUIPlayer-IPA/ArkUIPlayer.ipa
-        retention-days: 7
+        tag_name: ${{ steps.relmeta.outputs.tag }}
+        name: ${{ steps.relmeta.outputs.name }}
+        # 用 commit 信息作为 Release 说明,方便在 Releases 页面看到这次构建对应哪些改动。
+        body: |
+          ArkUIPlayer unsigned IPA build
+
+          - Commit: ${{ github.sha }}
+          - Branch: ${{ github.ref_name }}
+          - Run: ${{ github.run_number }}
+          - Built at: ${{ github.event.head_commit.timestamp }}
+
+          内含已嵌入的 ArkUI-X 运行时(libarkui_ios.framework),可直接侧载到未越狱 iOS 设备(需自签名)。
+        # 标记为预发布,避免覆盖正式版本号。
+        prerelease: true
+        # 每次 push 都生成新 Release;若同名 tag 已存在则覆盖。
+        make_latest: false
+        files: |
+          ArkUIPlayer/ArkUIPlayer-IPA/ArkUIPlayer.ipa
