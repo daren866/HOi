@@ -306,8 +306,24 @@ static HAPManager *_sharedInstance = nil;
 #if HAS_ARKUI_X
     // 销毁当前所有 StageViewController 关联的 ability,并尝试销毁 ArkTS 虚拟机,
     // 以确保下一次加载 hap 时 abc 字节码可以干净地重新加载与运行。
-    [StageApplication releaseViewControllers];
-    [StageApplication destroyVm];
+    //
+    // 注意:releaseViewControllers / destroyVm 这两个 selector 虽然在
+    // StageApplication.h 源码里声明了,但官方 SDK(libarkui_ios.xcframework)
+    // 的公开导出 Headers 中并未包含它们。为了保证 CI 使用预编译 framework 时也能编过,
+    // 这里改为 performSelector 动态调用,并通过 respondsToSelector 做运行时保护。
+    StageApplication *shared = [StageApplication class];
+    if ([shared respondsToSelector:@selector(releaseViewControllers)]) {
+        [shared performSelector:@selector(releaseViewControllers)];
+    }
+    if ([shared respondsToSelector:@selector(destroyVm)]) {
+        // destroyVm 返回 BOOL,用 NSInvocation 忽略返回值,避免 ARC/类型告警。
+        SEL sel = @selector(destroyVm);
+        NSMethodSignature *sig = [shared methodSignatureForSelector:sel];
+        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+        inv.target = shared;
+        inv.selector = sel;
+        [inv invoke];
+    }
 #endif
 
     NSFileManager *fm = [NSFileManager defaultManager];
