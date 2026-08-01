@@ -14,6 +14,11 @@ static NSString *const kDefaultModuleName = @"entry";
 static NSString *const kDefaultAbilityName = @"EntryAbility";
 static NSString *const kDefaultBundleName = @"com.example.hap";
 static NSString *const kArkuiXDirName = @"arkui-x";
+// StageAssetProvider::GetAppDataModuleDir() 内部返回的路径是
+// Documents/files/arkui-x(见 stage_asset_provider.mm),hap 必须解压到这个目录下,
+// 否则 GetModuleBuffer / GetModuleAbilityBuffer 在 StageAssetManager 数组里找不到
+// abc 时走回退路径 GetAppDataModuleDir()+moduleName 会落空,返回空 buffer 让 AppMain 崩溃。
+static NSString *const kFilesSubdirName = @"files";
 
 @interface HAPManager ()
 
@@ -41,12 +46,24 @@ static HAPManager *_sharedInstance = nil;
 - (instancetype)init {
     self = [super init];
     if (self) {
+        // 必须用 Documents/files/arkui-x,与 StageAssetProvider::GetAppDataModuleDir() 对齐。
+        // StageAssetProvider 在 StageAssetManager 数组里找不到 abc 时,会回退到
+        // GetAppDataModuleDir()+moduleName 查找,如果 hap 没解压到这个目录,回退路径会落空。
         NSString *documentsDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-        self.arkuiXDirectory = [documentsDir stringByAppendingPathComponent:kArkuiXDirName];
+        NSString *filesDir = [documentsDir stringByAppendingPathComponent:kFilesSubdirName];
+        self.arkuiXDirectory = [filesDir stringByAppendingPathComponent:kArkuiXDirName];
 
         NSFileManager *fm = [NSFileManager defaultManager];
         if (![fm fileExistsAtPath:self.arkuiXDirectory]) {
             [fm createDirectoryAtPath:self.arkuiXDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+        }
+
+        // 清理旧版本残留在 Documents/arkui-x 的数据(早期版本用 Documents/arkui-x,
+        // 与 GetAppDataModuleDir() 的 Documents/files/arkui-x 不一致,留着会干扰扫描)。
+        NSString *legacyDir = [documentsDir stringByAppendingPathComponent:kArkuiXDirName];
+        if ([fm fileExistsAtPath:legacyDir]) {
+            NSLog(@"[HAPManager] Cleaning legacy arkui-x directory at %@", legacyDir);
+            [fm removeItemAtPath:legacyDir error:nil];
         }
     }
     return self;
@@ -91,6 +108,17 @@ static HAPManager *_sharedInstance = nil;
             return;
         }
 
+        // 打印 hap 解压后的目录结构(前 30 个条目),便于排查 hap 真实产物结构。
+        NSLog(@"[HAPManager] HAP extracted to %@, top-level entries:", extractDir);
+        NSArray *extractTopEntries = [fm contentsOfDirectoryAtPath:extractDir error:nil];
+        for (NSString *entry in extractTopEntries) {
+            BOOL isDir = NO;
+            [fm fileExistsAtPath:[extractDir stringByAppendingPathComponent:entry] isDirectory:&isDir];
+            NSLog(@"[HAPManager]   %@%@", entry, isDir ? @"/" : @"");
+        }
+        NSUInteger totalSubpaths = [[fm subpathsOfDirectoryAtPath:extractDir error:nil] count];
+        NSLog(@"[HAPManager] Total subpaths under extract dir: %lu", (unsigned long)totalSubpaths);
+
         // 从解压目录中读取 module.json,解析出运行 abc 所需的 bundleName/moduleName/abilityName。
         NSString *appName = [hapPath lastPathComponent];
         appName = [appName stringByReplacingOccurrencesOfString:@".hap" withString:@""];
@@ -123,16 +151,28 @@ static HAPManager *_sharedInstance = nil;
             return;
         }
 
-        // 把 hap 解压内容安置到 Documents/arkui-x/{bundleName}.{moduleName}/ 下。
-        // StageViewController initWithInstanceName 内部 ExistDir 会按 "/{bundleName}.{moduleName}/"
-        // 搜索 StageAssetManager 中的路径(见 StageAssetManager+moduleNamePath 拼接逻辑),只有路径匹配,
-        // StageViewController 才会把 self.moduleName 重写成 bundleName.moduleName,把 instanceName 改写成
-        // 4 段式 bundleName : bundleName.moduleName : abilityName : instanceId。AppMain 读取 abc 时,也需要
-        // 目录名与 module.json 中重写后的 module.name 一致,否则找不到 abc 入口。
+        // 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。
+        //
+        // 真实未签名 hap 解压后根目录直接是 ets/modules.abc、module.json、resources/、resources.index、
+        // pack.info、pkgContextInfo.json(没有 entry/ 子目录)。而 ArkUI-X iOS 工程期望的 arkui-x/ 目录
+        // 结构是 {moduleName}/ 子目录 + AppScope/(可选) + systemres/(SDK 提供)。
+        // 所以这里把 hap 解压根目录的所有条目整体拷贝到 {moduleName}/ 下,目录名用纯 moduleName(如 entry),
+        // 与 ArkUI-X 官方文档的 iOS 工程产物结构对齐:
+        //   arkui-x/entry/ets/modules.abc
+        //   arkui-x/entry/module.json
+        //   arkui-x/entry/resources/...
+        //
+        // 注意:不要把目录名改成 bundleName.moduleName(如 com.example.entry)!
+        // a) ArkUI-X 官方文档明确 iOS 工程产物目录名就是纯 moduleName。
+        // b) StageViewController.initWithInstanceName 中的 ExistDir 会搜索 "/bundleName.moduleName/",
+        //    标准产物路径里只有 "/entry/",所以 ExistDir 返回 NO,StageVC 保持 moduleName="entry" 不重写,
+        //    这与 AppMain 从 module.json 读到的 module.name="entry" 一致,DispatchOnCreate 能正确匹配 abc。
+        // c) abc 字节码中模块名由 ArkTS 编译器决定(通常是 "entry"),改写 module.json 不会影响 abc 内部
+        //    的模块名注册,反而会导致 module.name 与 abc 模块名错位 → AppMain 找不到 abc 入口 → 闪退或白屏。
+        // d) SDK 内部的 updateModuleNameWithJsonData: 也只在路径包含 bundleName.moduleName 时才改写
+        //    module.name,标准产物路径不包含,所以不改写是预期行为。
         if (![self installExtractedFilesFrom:extractDir
-                                  bundleName:bundleName
                                   moduleName:moduleName
-                               abilityName:abilityName
                            toArkuiXDirectory:self.arkuiXDirectory]) {
             [fm removeItemAtPath:extractDir error:nil];
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -154,16 +194,54 @@ static HAPManager *_sharedInstance = nil;
 #if HAS_ARKUI_X
             // 传入绝对路径(Documents/arkui-x),StageAssetManager 会扫描其下所有文件,
             // 包括 {moduleName}/ets/modules.abc 与 {moduleName}/module.json 等。
+            NSLog(@"[HAPManager] configModuleWithBundleDirectory: %@", self.arkuiXDirectory);
             [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
+
+            // 打印已安装到 arkui-x 下的 module.json 内容,确认 hap 中的 module.json 被原样拷贝
+            // (未做改写),module.name 仍是 ArkTS 编译器写入的原始值(通常是 "entry")。
+            NSString *installedModuleJson = [self.arkuiXDirectory
+                stringByAppendingPathComponent:[NSString stringWithFormat:@"%@/module.json", moduleName]];
+            NSData *installedJsonData = [NSData dataWithContentsOfFile:installedModuleJson];
+            if (installedJsonData) {
+                NSDictionary *json = [NSJSONSerialization JSONObjectWithData:installedJsonData
+                                                                     options:0
+                                                                       error:nil];
+                NSLog(@"[HAPManager] Installed module.json: app.bundleName=%@, module.name=%@, module.mainElement=%@",
+                      json[@"app"][@"bundleName"],
+                      json[@"module"][@"name"],
+                      json[@"module"][@"mainElement"]);
+            } else {
+                NSLog(@"[HAPManager] ⚠️ module.json not found at %@", installedModuleJson);
+            }
+
+            // 确认 abc 文件确实存在于安装目录下。
+            NSString *abcPath = [self.arkuiXDirectory
+                stringByAppendingPathComponent:[NSString stringWithFormat:@"%@/ets/modules.abc", moduleName]];
+            BOOL abcExists = [[NSFileManager defaultManager] fileExistsAtPath:abcPath];
+            NSLog(@"[HAPManager] abc file at %@ exists=%d", abcPath, abcExists);
+            if (!abcExists) {
+                // 退而检查 ets 目录下其他 .abc 文件(AbilityStage.abc 等)。
+                NSString *etsDir = [self.arkuiXDirectory
+                    stringByAppendingPathComponent:[NSString stringWithFormat:@"%@/ets", moduleName]];
+                NSArray *etsFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:etsDir error:nil];
+                NSLog(@"[HAPManager] ets dir contents: %@", etsFiles);
+            }
 
             // launchApplication 内部会注册 NSNotificationCenter observer、初始化 AppMain 单例、
             // 启动 ArkUI 虚拟机等全局副作用。重复调用会重复注册 observer 并二次初始化已存在的
             // 全局对象,直接崩溃。所以只在第一次加载 hap 时调用一次,后续 hap 切换只 configModule。
             if (!self.isArkUIRunning) {
-                [StageApplication launchApplication];
-                self.isArkUIRunning = YES;
-                NSLog(@"[HAPManager] ArkUI runtime launched for bundle=%@ module=%@ ability=%@",
-                      bundleName, moduleName, abilityName);
+                NSLog(@"[HAPManager] First launchApplication, calling StageApplication.launchApplication...");
+                @try {
+                    [StageApplication launchApplication];
+                    self.isArkUIRunning = YES;
+                    NSLog(@"[HAPManager] ArkUI runtime launched OK for bundle=%@ module=%@ ability=%@",
+                          bundleName, moduleName, abilityName);
+                } @catch (NSException *e) {
+                    NSLog(@"[HAPManager] ❌ launchApplication crashed: %@\n%@", e, e.callStackSymbols);
+                    completion(NO, [NSString stringWithFormat:@"launchApplication crashed: %@", e.reason]);
+                    return;
+                }
             } else {
                 NSLog(@"[HAPManager] ArkUI runtime already running, re-configured module only");
             }
@@ -502,27 +580,24 @@ static HAPManager *_sharedInstance = nil;
     return NO;
 }
 
-// 把 hap 解压内容安置到 Documents/arkui-x/{bundleName}.{moduleName}/ 下。
+// 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。
 //
-// 目录名用 "bundleName.moduleName" 是为了同时满足三处路径匹配:
-//   a) StageViewController.initWithInstanceName 中的 ExistDir: 会按
-//      "/{bundleName}.{moduleName}/" 在 StageAssetManager.allModuleFilePathArray 中搜索,
-//      命中后才会把 self.moduleName 改写成 bundleName.moduleName,并同步改写 instanceName。
-//   b) AppMain 在 LaunchApplication 时扫描 module.json,StageAssetManager 的
-//      updateModuleNameWithJsonData: 会在 module.json 路径中包含
-//      bundleName.moduleName 时,把 json 里的 module.name 重写成 bundleName.moduleName。
-//   c) abc 字节码中的模块引用也需要与 重写后的 module.name 对齐,否则 DispatchOnCreate
-//      找不到入口 ability → Surface 出来但一片空白。
+// 真实未签名 hap 解压后根目录直接是 ets/modules.abc、module.json、resources/、resources.index、
+// pack.info、pkgContextInfo.json 等(没有 entry/ 子目录)。ArkUI-X iOS 工程期望的 arkui-x/ 目录
+// 结构是 {moduleName}/ 子目录 + systemres/(SDK 提供)。所以这里把 hap 解压根目录的所有
+// 条目整体拷贝到 {moduleName}/ 下,目录名用纯 moduleName(如 entry),与官方产物结构对齐。
 //
-// 安装完成后,本方法还会:
-//   1. 重写安装目录下的 module.json,显式把 module.name 改成 bundleName.moduleName,
-//      module.packageName 改成 bundleName.packageName;
-//   2. 在 arkuiXDirectory 下生成 AppScope/app.json,写进 app.bundleName 等字段,
-//      保证 AppMain 在加载 abc 前能读到完整的 app 信息结构(缺 app.json 会直接崩)。
+// 关键:不要改写 module.json,不要生成 AppScope/app.json!
+// - module.json 的 module.name 字段在 hap 编译时就由 ArkTS 编译器决定(通常是 "entry"),
+//   与 abc 字节码中注册的模块名一致。手动改写 module.name 会导致 module.name 与 abc 模块名错位,
+//   AppMain 找不到 abc 入口 → 闪退或白屏。
+// - StageAssetManager 的 updateModuleNameWithJsonData: 也只在路径包含 bundleName.moduleName
+//   时才改写 module.name。标准产物路径只含 "/entry/",不含 "/bundleName.entry/",所以 SDK
+//   不会改写 module.name,这是预期行为。
+// - AppMain::LaunchApplication 会从 module.json 自身的 app.bundleName 字段读取 app 信息,
+//   不需要额外的 AppScope/app.json。手动合成格式不正确的 app.json 反而会干扰 AppMain。
 - (BOOL)installExtractedFilesFrom:(NSString *)extractDir
-                       bundleName:(NSString *)bundleName
                        moduleName:(NSString *)moduleName
-                    abilityName:(NSString *)abilityName
                 toArkuiXDirectory:(NSString *)arkuiXDirectory {
     NSFileManager *fm = [NSFileManager defaultManager];
 
@@ -530,9 +605,8 @@ static HAPManager *_sharedInstance = nil;
         [fm createDirectoryAtPath:arkuiXDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     }
 
-    // 最终目录名: bundleName.moduleName (例如 com.example.entry)
-    NSString *qualifiedModuleName = [NSString stringWithFormat:@"%@.%@", bundleName, moduleName];
-    NSString *moduleDestDir = [arkuiXDirectory stringByAppendingPathComponent:qualifiedModuleName];
+    // 目录名用纯 moduleName(如 "entry"),对齐 ArkUI-X 官方 iOS 工程产物结构。
+    NSString *moduleDestDir = [arkuiXDirectory stringByAppendingPathComponent:moduleName];
     if ([fm fileExistsAtPath:moduleDestDir]) {
         [fm removeItemAtPath:moduleDestDir error:nil];
     }
@@ -546,10 +620,13 @@ static HAPManager *_sharedInstance = nil;
         return NO;
     }
 
-    // 先把文件全部拷贝到 moduleDestDir。
+    NSLog(@"[HAPManager] Installing hap contents into %@ (entries=%lu)",
+          moduleDestDir, (unsigned long)entries.count);
+
+    // 把 hap 解压根目录的所有条目整体拷贝到 {moduleName}/ 下。
+    // hap 内容里若已自带与 moduleName 同名的子目录(某些 hap 把内容打包在 entry/ 子目录里),
+    // 直接展开避免嵌套。
     for (NSString *entry in entries) {
-        // hap 内容里若已自带与 moduleName 同名的子目录(例如 entry/),直接展开避免嵌套;
-        // 否则把每个条目直接拷贝到 {bundleName}.{moduleName}/ 下。
         if ([entry isEqualToString:moduleName]) {
             NSString *nestedDir = [extractDir stringByAppendingPathComponent:entry];
             NSArray *nestedEntries = [fm contentsOfDirectoryAtPath:nestedDir error:nil];
@@ -563,6 +640,7 @@ static HAPManager *_sharedInstance = nil;
                     [fm removeItemAtPath:destPath error:nil];
                 }
                 if (![fm copyItemAtPath:sourcePath toPath:destPath error:&error]) {
+                    NSLog(@"[HAPManager] Failed to copy %@ -> %@ : %@", sourcePath, destPath, error);
                     return NO;
                 }
             }
@@ -575,123 +653,20 @@ static HAPManager *_sharedInstance = nil;
             [fm removeItemAtPath:destPath error:nil];
         }
         if (![fm copyItemAtPath:sourcePath toPath:destPath error:&error]) {
+            NSLog(@"[HAPManager] Failed to copy %@ -> %@ : %@", sourcePath, destPath, error);
             return NO;
         }
     }
 
-    // ===== 1. 重写安装目录下的 module.json =====
-    // 显式把 module.name 改成 bundleName.moduleName,
-    // 保证 AppMain 读到的 module.name 与 StageViewController 传的一致。
-    NSString *installedModuleJsonPath = [moduleDestDir stringByAppendingPathComponent:@"module.json"];
-    if ([fm fileExistsAtPath:installedModuleJsonPath]) {
-        NSData *jsonData = [NSData dataWithContentsOfFile:installedModuleJsonPath];
-        if (jsonData) {
-            NSError *jsonError = nil;
-            NSMutableDictionary *jsonDict = [NSJSONSerialization
-                JSONObjectWithData:jsonData
-                           options:NSJSONReadingMutableContainers | NSJSONReadingMutableLeaves
-                             error:&jsonError];
-            if (!jsonError && [jsonDict isKindOfClass:[NSMutableDictionary class]]) {
-                NSMutableDictionary *appObj = jsonDict[@"app"];
-                NSMutableDictionary *moduleObj = jsonDict[@"module"];
-
-                if (![appObj isKindOfClass:[NSMutableDictionary class]]) {
-                    appObj = [NSMutableDictionary dictionary];
-                    jsonDict[@"app"] = appObj;
-                }
-                if (![moduleObj isKindOfClass:[NSMutableDictionary class]]) {
-                    moduleObj = [NSMutableDictionary dictionary];
-                    jsonDict[@"module"] = moduleObj;
-                }
-
-                appObj[@"bundleName"] = bundleName;
-                if (!appObj[@"appName"]) {
-                    appObj[@"appName"] = moduleName;
-                }
-                if (!appObj[@"versionCode"]) {
-                    appObj[@"versionCode"] = @(1000000);
-                }
-                if (!appObj[@"versionName"]) {
-                    appObj[@"versionName"] = @"1.0.0";
-                }
-                if (!appObj[@"apiReleaseType"]) {
-                    appObj[@"apiReleaseType"] = @"Release";
-                }
-
-                // 关键改写: module.name = bundleName.moduleName
-                moduleObj[@"name"] = qualifiedModuleName;
-
-                // packageName 同样前缀化,保证与 abc 中注册的包名对齐。
-                NSString *origPackage = moduleObj[@"packageName"];
-                if (origPackage && [origPackage isKindOfClass:[NSString class]] && origPackage.length > 0) {
-                    // 如果原 packageName 已经带了 bundleName 前缀就不用重复加。
-                    if (![origPackage hasPrefix:[NSString stringWithFormat:@"%@.", bundleName]]) {
-                        moduleObj[@"packageName"] = [NSString stringWithFormat:@"%@.%@", bundleName, origPackage];
-                    }
-                } else {
-                    moduleObj[@"packageName"] = [NSString stringWithFormat:@"%@.%@.uiability", bundleName, moduleName];
-                }
-
-                // 确保 module.mainElement 和 abilities[0].name 与传入的 abilityName 对齐。
-                if (!moduleObj[@"mainElement"] && abilityName.length > 0) {
-                    moduleObj[@"mainElement"] = abilityName;
-                }
-
-                NSData *written = [NSJSONSerialization dataWithJSONObject:jsonDict
-                                                                   options:NSJSONWritingPrettyPrinted
-                                                                     error:nil];
-                if (written) {
-                    [written writeToFile:installedModuleJsonPath atomically:YES];
-                    NSLog(@"[HAPManager] Rewrote module.json: module.name=%@, bundleName=%@",
-                          qualifiedModuleName, bundleName);
-                }
-            }
-        }
+    // 打印安装后的目录结构(只列前 30 个条目,递归扫描),便于在 CI 日志中排查 hap 结构问题。
+    NSLog(@"[HAPManager] Installed directory tree under %@:", moduleDestDir);
+    NSArray *installedSubpaths = [fm subpathsOfDirectoryAtPath:moduleDestDir error:nil];
+    NSUInteger printCount = MIN(installedSubpaths.count, 30);
+    for (NSUInteger i = 0; i < printCount; i++) {
+        NSLog(@"[HAPManager]   %@", [moduleDestDir stringByAppendingPathComponent:installedSubpaths[i]]);
     }
-
-    // ===== 2. 在 arkuiXDirectory 根下生成 AppScope/app.json =====
-    // 很多 ArkUI-X 的 AppMain::LaunchApplication 实现会先读 AppScope/app.json
-    // (或等价的 app.json 位置)来取 bundleName 等 app 级信息;缺它的话 LaunchApplication
-    // 可能直接 crash,或者后续 DispatchOnCreate 无法匹配到正确的入口 bundle。
-    NSString *appScopeDir = [arkuiXDirectory stringByAppendingPathComponent:@"AppScope"];
-    if (![fm fileExistsAtPath:appScopeDir]) {
-        [fm createDirectoryAtPath:appScopeDir withIntermediateDirectories:YES attributes:nil error:nil];
-    }
-    NSString *appJsonPath = [appScopeDir stringByAppendingPathComponent:@"app.json"];
-
-    NSMutableDictionary *appJson = [NSMutableDictionary dictionary];
-    NSMutableDictionary *appSection = [NSMutableDictionary dictionaryWithDictionary:@{
-        @"bundleName" : bundleName,
-        @"vendor"     : @"arkuiplayer",
-        @"versionCode": @(1000000),
-        @"versionName": @"1.0.0",
-        @"icon"       : @"$media:app_icon",
-        @"label"      : @"$string:app_name",
-        @"apiReleaseType": @"Release",
-        @"apiVersion" : @{
-            @"apiType":   @"standard",
-            @"compatible": @11,
-            @"target":    @11,
-            @"releaseType": @"Release",
-        },
-    }];
-    appJson[@"app"] = appSection;
-
-    NSMutableArray *moduleListSection = [NSMutableArray arrayWithObject:@{
-        @"name":       qualifiedModuleName,
-        @"srcEntry":   @"",
-        @"description": @"$string:module_description",
-        @"mainElement": abilityName.length > 0 ? abilityName : @"EntryAbility",
-    }];
-    appJson[@"modules"] = moduleListSection;
-
-    NSData *appJsonData = [NSJSONSerialization dataWithJSONObject:appJson
-                                                           options:NSJSONWritingPrettyPrinted
-                                                             error:nil];
-    if (appJsonData) {
-        [appJsonData writeToFile:appJsonPath atomically:YES];
-        NSLog(@"[HAPManager] Wrote AppScope/app.json with bundleName=%@ module=%@",
-              bundleName, qualifiedModuleName);
+    if (installedSubpaths.count > printCount) {
+        NSLog(@"[HAPManager]   ... and %lu more entries", (unsigned long)(installedSubpaths.count - printCount));
     }
 
     return YES;
