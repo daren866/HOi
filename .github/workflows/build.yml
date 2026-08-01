@@ -280,7 +280,7 @@ jobs:
           # FRAMEWORK_SEARCH_PATHS 指向 xcframework 的真机/模拟器切片目录,这样 -framework libarkui_ios 才能被链接器正确解析到二进制。
           echo 'FRAMEWORK_SEARCH_PATHS = $(inherited) "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64" "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator"' >> ArkUIPlayer/ArkUIOverrides.xcconfig
           echo 'LIBRARY_SEARCH_PATHS = $(inherited) $(SRCROOT)/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
-          echo 'LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @loader_path/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
+          echo 'LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
           # ArkUI-X 依赖的系统 framework:Metal 渲染、CoreGraphics 绘制、Foundation 运行时、
           # UIKit 视图/事件、QuartzCore 动画、CoreText/ImageIO 资源、CFNetwork/Combine等。
           echo 'OTHER_LDFLAGS = $(inherited) -ObjC -lc++ -framework libarkui_ios -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework Metal -framework MetalKit -framework CoreText -framework ImageIO -framework CFNetwork -framework AVFoundation -framework WebKit -framework Combine -framework UserNotifications' >> ArkUIPlayer/ArkUIOverrides.xcconfig
@@ -311,38 +311,16 @@ jobs:
             mkdir -p "$APP_PATH/Frameworks"
             if [ -d "Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework" ]; then
               cp -R "Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework" "$APP_PATH/Frameworks/"
-
+              # xcframework 拷贝后要清理模拟器符号和切片,否则 App Store / adhoc 分发会拒绝;unsigned 包也清理以节省空间。
               BIN="$APP_PATH/Frameworks/libarkui_ios.framework/libarkui_ios"
               if [ -f "$BIN" ] && command -v lipo >/dev/null 2>&1; then
                 ARCHES=$(lipo -info "$BIN" 2>/dev/null | tail -1 || true)
-                echo "  Framework binary arches: $ARCHES"
+                echo "  Framework binary arches before: $ARCHES"
               fi
-
-              # ===== 关键:TrollStore 安装的 unsigned IPA 中,所有 dylib/framework 仍然需要
-              # 携带签名(ad-hoc 即可)。如果完全 remove-signature,dyld 在加载 framework 时会
-              # 因 "code signature invalid" 直接终止进程,表现为 App 启动即闪退。
-              # 这里用 codesign -f -s - 对 framework 主二进制及所有内部 .dylib 强制做 ad-hoc 签名。
-              # TrollStore 安装时会校验并接受 ad-hoc 签名。
-              if command -v codesign >/dev/null 2>&1; then
-                echo "🔐 Ad-hoc signing all binaries in Frameworks/..."
-                # 先签 framework 内部的所有 .dylib(如果有的话),从最深层开始签。
-                find "$APP_PATH/Frameworks/" -name "*.dylib" -type f | while read -r dylib; do
-                  echo " Signing: $dylib"
-                  codesign -f -s - "$dylib" 2>/dev/null || echo "  (warning: failed to sign $dylib)"
-                done
-                # 再签 framework 主二进制(必须在签完其依赖的 dylib 之后)。
-                if [ -f "$BIN" ]; then
-                  echo "  Signing framework main binary: $BIN"
-                  codesign -f -s - "$BIN" 2>/dev/null || echo "  (warning: failed to sign $BIN)"
-                fi
-                # 对 Frameworks/ 下每个 .framework 目录本身也做签名(签名整个 bundle)。
-                find "$APP_PATH/Frameworks/" -name "*.framework" -type d | while read -r fw; do
-                  echo "  Signing framework bundle: $fw"
-                  codesign -f -s - "$fw" 2>/dev/null || echo "  (warning: failed to sign $fw)"
-                done
-                echo "✅ Ad-hoc signing complete"
+              # 去除签名(因为是 unsigned 包,framework 的签名与 app 不一致会导致安装失败)。
+              if [ -f "$BIN" ] && command -v codesign >/dev/null 2>&1; then
+                codesign --remove-signature "$BIN" 2>/dev/null || true
               fi
-
               echo "✅ Embedded libarkui_ios.framework into $APP_PATH/Frameworks/"
               ls -la "$APP_PATH/Frameworks/"
             fi
