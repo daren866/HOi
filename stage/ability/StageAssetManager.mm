@@ -56,7 +56,14 @@ using AppMain = OHOS::AbilityRuntime::Platform::AppMain;
 - (void)moduleFilesWithbundleDirectory:(NSString *_Nonnull)bundleDirectory {
     NSError *error = nil;
     NSMutableArray *files = [[NSMutableArray alloc] init];
-    NSString *bundlePath = [NSString stringWithFormat:@"%@/%@", [NSBundle mainBundle].bundlePath, bundleDirectory];
+    // 支持动态加载 hap:若传入的是绝对路径(以 "/" 开头),则直接使用,不再拼接 mainBundle 路径。
+    // 这样 HAPManager 可以把 hap 解压到 Documents/arkui-x 后,把该绝对路径传给 StageApplication。
+    NSString *bundlePath = nil;
+    if ([bundleDirectory hasPrefix:@"/"]) {
+        bundlePath = bundleDirectory;
+    } else {
+        bundlePath = [NSString stringWithFormat:@"%@/%@", [NSBundle mainBundle].bundlePath, bundleDirectory];
+    }
     LOGI("%{public}s, \n bundlePath is : %{public}s", __func__, [bundlePath UTF8String]);
     self.bundlePath = bundlePath;
     NSArray *moduleArray = [[NSFileManager defaultManager] subpathsOfDirectoryAtPath:bundlePath error:&error];

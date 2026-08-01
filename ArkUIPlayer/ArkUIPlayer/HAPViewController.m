@@ -181,18 +181,23 @@
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"HAPCell"];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
-    
+
     NSDictionary *hapInfo = self.hapInfoList[indexPath.row];
     cell.textLabel.text = hapInfo[@"appName"];
     cell.textLabel.font = [UIFont boldSystemFontOfSize:16];
-    cell.detailTextLabel.text = hapInfo[@"bundleName"];
+
+    NSString *bundleName = hapInfo[@"bundleName"] ?: @"";
+    NSString *moduleName = hapInfo[@"moduleName"] ?: @"";
+    NSString *abilityName = hapInfo[@"abilityName"] ?: @"";
+    // 在副标题里展示 hap 的入口三元组,方便确认 abc 字节码对应的运行入口是否被正确解析。
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@:%@", bundleName, moduleName, abilityName];
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
     cell.detailTextLabel.textColor = [UIColor grayColor];
-    
+
     UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 48, 48)];
     iconView.backgroundColor = [UIColor colorWithRed:200/255.0 green:200/255.0 blue:200/255.0 alpha:1.0];
     cell.imageView.image = iconView.image;
-    
+
     return cell;
 }
 
@@ -204,18 +209,27 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
+
     NSDictionary *hapInfo = self.hapInfoList[indexPath.row];
     NSString *hapPath = hapInfo[@"path"];
-    NSString *bundleName = hapInfo[@"bundleName"];
-    
+    NSString *bundleName = hapInfo[@"bundleName"] ?: @"com.example.hap";
+    NSString *moduleName = hapInfo[@"moduleName"] ?: @"entry";
+    NSString *abilityName = hapInfo[@"abilityName"] ?: @"EntryAbility";
+
     [self.loadingIndicator startAnimating];
-    
+
     [self.hapManager loadHAPAtPath:hapPath completion:^(BOOL success, NSString *errorMessage) {
         [self.loadingIndicator stopAnimating];
-        
+
         if (success) {
-            HAPPlayerViewController *playerVC = [[HAPPlayerViewController alloc] initWithHAPManager:self.hapManager bundleName:bundleName];
+            // loadHAP 完成后,abc 字节码已经被 ArkUI 运行时加载并启动,
+            // 这里用从 module.json 解析出的 bundleName/moduleName/abilityName 创建播放 VC,
+            // StageViewController 会通过该 instanceName 触发 abc 渲染出的 ArkUI 页面挂载到屏幕上。
+            HAPPlayerViewController *playerVC = [[HAPPlayerViewController alloc]
+                initWithHAPManager:self.hapManager
+                        bundleName:bundleName
+                        moduleName:moduleName
+                       abilityName:abilityName];
             [self.navigationController pushViewController:playerVC animated:YES];
         } else {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加载失败" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
