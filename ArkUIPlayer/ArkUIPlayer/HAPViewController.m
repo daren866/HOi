@@ -1,5 +1,6 @@
 #import "HAPViewController.h"
 #import "HAPPlayerViewController.h"
+#import <QuartzCore/QuartzCore.h>
 
 @interface HAPViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 
@@ -222,6 +223,11 @@
         [self.loadingIndicator stopAnimating];
 
         if (success) {
+            // push 前先 pop 回根 VC,确保旧的 StageViewController 被 dealloc,
+            // 否则旧的 instanceName 仍会留在 AppMain 内部表中,下一个 hap 的 DispatchOnCreate
+            // 可能找不到正确的入口或者对同一个 instanceName 重复 DispatchOnCreate 崩。
+            [self.navigationController popToRootViewControllerAnimated:NO];
+
             // loadHAP 完成后,abc 字节码已经被 ArkUI 运行时加载并启动,
             // 这里用从 module.json 解析出的 bundleName/moduleName/abilityName 创建播放 VC,
             // StageViewController 会通过该 instanceName 触发 abc 渲染出的 ArkUI 页面挂载到屏幕上。
@@ -230,7 +236,18 @@
                         bundleName:bundleName
                         moduleName:moduleName
                        abilityName:abilityName];
+
+            // 用 animated:YES 推入,等转场完成后再主动触发一次 foreground,
+            // 因为 StageViewController.viewDidLoad 已经发过 DispatchOnForeground,
+            // 但此时 abc 字节码里的 ability 组件可能还没挂载好。
+            [CATransaction begin];
+            [CATransaction setCompletionBlock:^{
+                if (self.hapManager.isArkUIRunning) {
+                    [self.hapManager callCurrentAbilityOnForeground];
+                }
+            }];
             [self.navigationController pushViewController:playerVC animated:YES];
+            [CATransaction commit];
         } else {
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加载失败" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
