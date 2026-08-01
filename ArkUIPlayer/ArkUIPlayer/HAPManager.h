@@ -17,10 +17,12 @@ typedef void (^HAPModuleInfoCompletion)(NSString *appName, NSString *bundleName,
 @property (nonatomic, copy, readonly) NSString *currentBundleName;
 @property (nonatomic, copy, readonly) NSString *currentModuleName;
 @property (nonatomic, copy, readonly) NSString *currentAbilityName;
+// ArkUI 运行时是否已通过 StageApplication launchApplication 启动。
+// AppDelegate 的前后台回调、HAPPlayerViewController 的 viewWillAppear 都需要先检查这个标志,
+// 否则在 hap 加载完成前调用 DispatchOnForeground 会触发空指针/状态机错乱崩溃。
+@property (nonatomic, assign, readonly) BOOL isArkUIRunning;
 
 + (instancetype)sharedManager;
-
-- (void)initializeArkUI;
 
 - (void)loadHAPAtPath:(NSString *)hapPath completion:(HAPLoadCompletion)completion;
 

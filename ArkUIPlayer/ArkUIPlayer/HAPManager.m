@@ -19,7 +19,7 @@ static NSString *const kArkuiXDirName = @"arkui-x";
 
 @property (nonatomic, strong) NSString *currentHAPPath;
 @property (nonatomic, strong) NSString *arkuiXDirectory;
-@property (nonatomic, assign) BOOL isInitialized;
+@property (nonatomic, assign) BOOL isArkUIRunning;
 @property (nonatomic, copy) NSString *currentBundleName;
 @property (nonatomic, copy) NSString *currentModuleName;
 @property (nonatomic, copy) NSString *currentAbilityName;
@@ -52,15 +52,6 @@ static HAPManager *_sharedInstance = nil;
     return self;
 }
 
-- (void)initializeArkUI {
-    if (self.isInitialized) {
-        return;
-    }
-    self.isInitialized = YES;
-    // 注意:StageApplication 的 configModule/launchApplication 推迟到 loadHAPAtPath 时再调用,
-    // 因为此时才能从 hap 中解析出真实的 bundle 目录与 abc 字节码位置。
-}
-
 #pragma mark - Load HAP and run abc bytecode
 
 - (void)loadHAPAtPath:(NSString *)hapPath completion:(HAPLoadCompletion)completion {
@@ -80,8 +71,10 @@ static HAPManager *_sharedInstance = nil;
     }
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 先卸载当前已加载的 hap(包括销毁 ArkUI 运行时上下文)。
-        [self unloadCurrentHAP];
+        // 先在主线程清理上一个 hap 的运行时状态(StageApplication 必须在主线程操作)。
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [self unloadCurrentHAP];
+        });
 
         // 解压 hap 到临时目录,hap 本质是 zip。
         NSString *tempDir = NSTemporaryDirectory();
@@ -154,9 +147,18 @@ static HAPManager *_sharedInstance = nil;
             // 传入绝对路径(Documents/arkui-x),StageAssetManager 会扫描其下所有文件,
             // 包括 {moduleName}/ets/modules.abc 与 {moduleName}/module.json 等。
             [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
-            [StageApplication launchApplication];
-            NSLog(@"[HAPManager] ArkUI runtime launched for bundle=%@ module=%@ ability=%@",
-                  bundleName, moduleName, abilityName);
+
+            // launchApplication 内部会注册 NSNotificationCenter observer、初始化 AppMain 单例、
+            // 启动 ArkUI 虚拟机等全局副作用。重复调用会重复注册 observer 并二次初始化已存在的
+            // 全局对象,直接崩溃。所以只在第一次加载 hap 时调用一次,后续 hap 切换只 configModule。
+            if (!self.isArkUIRunning) {
+                [StageApplication launchApplication];
+                self.isArkUIRunning = YES;
+                NSLog(@"[HAPManager] ArkUI runtime launched for bundle=%@ module=%@ ability=%@",
+                      bundleName, moduleName, abilityName);
+            } else {
+                NSLog(@"[HAPManager] ArkUI runtime already running, re-configured module only");
+            }
 #else
             NSLog(@"[HAPManager] HAS_ARKUI_X disabled, abc bytecode cannot be executed.");
 #endif
@@ -304,25 +306,21 @@ static HAPManager *_sharedInstance = nil;
 
 - (void)unloadCurrentHAP {
 #if HAS_ARKUI_X
-    // 销毁当前所有 StageViewController 关联的 ability,并尝试销毁 ArkTS 虚拟机,
-    // 以确保下一次加载 hap 时 abc 字节码可以干净地重新加载与运行。
+    // 销毁当前所有 StageViewController 关联的 ability,以便下一次加载 hap 时
+    // 新的 abc 字节码可以干净地加载。
     //
-    // 注意:releaseViewControllers / destroyVm 这两个 selector 虽然在
-    // StageApplication.h 源码里声明了,但官方 SDK(libarkui_ios.xcframework)
-    // 的公开导出 Headers 中并未包含它们。为了保证 CI 使用预编译 framework 时也能编过,
-    // 这里改为 performSelector 动态调用,并通过 respondsToSelector 做运行时保护。
+    // 注意 1:这里不调用 destroyVm。destroyVm 会销毁 ArkTS 虚拟机,但 StageApplication
+    // 的 launchApplication 只能调一次(内部会重复注册 NotificationCenter observer 并二次
+    // 初始化 AppMain 单例导致崩溃)。VM 销毁后无法重建,新 hap 的 abc 就无法运行。
+    // 因此 hap 切换的正确做法是:保留 VM,只 releaseViewControllers + configModule 重载 abc。
+    //
+    // 注意 2:releaseViewControllers 这个 selector 虽然在 StageApplication.h 源码里声明了,
+    // 但官方 SDK(libarkui_ios.xcframework)的公开导出 Headers 中并未包含它。为了保证 CI
+    // 使用预编译 framework 时也能编过,这里改为 performSelector 动态调用,并通过
+    // respondsToSelector 做运行时保护。
     StageApplication *shared = [StageApplication class];
     if ([shared respondsToSelector:@selector(releaseViewControllers)]) {
         [shared performSelector:@selector(releaseViewControllers)];
-    }
-    if ([shared respondsToSelector:@selector(destroyVm)]) {
-        // destroyVm 返回 BOOL,用 NSInvocation 忽略返回值,避免 ARC/类型告警。
-        SEL sel = @selector(destroyVm);
-        NSMethodSignature *sig = [shared methodSignatureForSelector:sel];
-        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
-        inv.target = shared;
-        inv.selector = sel;
-        [inv invoke];
     }
 #endif
 
@@ -341,8 +339,9 @@ static HAPManager *_sharedInstance = nil;
     self.currentBundleName = nil;
     self.currentModuleName = nil;
     self.currentAbilityName = nil;
-    // 卸载后允许下一次 loadHAP 重新调用 StageApplication 配置与启动。
-    self.isInitialized = NO;
+    // 注意:这里不重置 isArkUIRunning=NO。因为 StageApplication launchApplication 只能调一次,
+    // 重复调用会重复注册 NotificationCenter observer 并二次初始化 AppMain 单例导致崩溃。
+    // isArkUIRunning 保持 YES,后续 loadHAP 只走 configModule 路径重载新 hap 的 abc 字节码。
 }
 
 #pragma mark - ZIP extract helpers
