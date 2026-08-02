@@ -17,10 +17,17 @@
 @property (nonatomic, strong) NSString *bundleName;
 @property (nonatomic, strong) NSString *moduleName;
 @property (nonatomic, strong) NSString *abilityName;
+// 从 module.json5/json 解析出的应用展示名,作为播放界面导航栏标题。
+@property (nonatomic, strong) NSString *appName;
+// 从 module.json5/json 解析出的入口界面名(abilities[0].srcEntry 末尾文件名,如 "Index"),
+// 用于在播放界面顶部副标题展示当前渲染的 ArkTS 页面。
+@property (nonatomic, strong) NSString *pageName;
 
 - (instancetype)initWithHAPManager:(HAPManager *)manager
                         bundleName:(NSString *)bundleName
                         moduleName:(NSString *)moduleName
-                       abilityName:(NSString *)abilityName;
+                       abilityName:(NSString *)abilityName
+                          appName:(NSString *)appName
+                         pageName:(NSString *)pageName;
 
 @end

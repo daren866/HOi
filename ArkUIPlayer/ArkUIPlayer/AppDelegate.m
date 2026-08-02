@@ -20,6 +20,14 @@
     // 全局单例,二次 launchApplication 会让运行时状态错乱,启动即闪退。
     self.hapManager = [HAPManager sharedManager];
 
+    // 尽早安装崩溃防护(在任何 StageApplication 调用之前)。
+    // 安装:
+    // - NSSetUncaughtExceptionHandler 拦截 ObjC 未捕获异常
+    // - sigaction 拦截 SIGABRT/SIGSEGV/SIGBUS/SIGILL/SIGFPE/SIGTRAP/SIGPIPE(C++ abort/段错误等)
+    // 一旦触发,进程不会 abort,改为弹出独立 UIWindow 显示"报错"红色居中文本,
+    // 点击文本可复制完整错误(含信号名+callstack)到剪贴板。
+    [self.hapManager installCrashGuard];
+
     HAPViewController *vc = [[HAPViewController alloc] initWithHAPManager:self.hapManager];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     [self setupNavigationBarAppearance:nav];
