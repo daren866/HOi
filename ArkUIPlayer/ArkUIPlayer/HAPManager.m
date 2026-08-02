@@ -760,14 +760,46 @@ static HAPManager *_sharedInstance = nil;
 
 #pragma mark - Foreground / Background
 
+// 检查当前导航栈顶部的 VC 是否是 StageViewController(或其子类)。
+// StageApplication callCurrentAbilityOnForeground/Background 内部会取 topVC 并调用 instanceName,
+// 如果 topVC 不是 StageViewController(比如列表页 HAPViewController),会触发
+// unrecognized selector instanceName 崩溃。这里提前拦截。
+- (BOOL)_isStageViewControllerOnTop {
+    UIWindow *keyWindow = nil;
+    for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *win in scene.windows) {
+            if (win.isKeyWindow) { keyWindow = win; break; }
+        }
+        if (keyWindow) break;
+    }
+    if (!keyWindow) return NO;
+
+    UIViewController *topVC = keyWindow.rootViewController;
+    if ([topVC isKindOfClass:[UINavigationController class]]) {
+        topVC = ((UINavigationController *)topVC).topViewController;
+    }
+    // 用 respondsToSelector 判断,不需要 import StageViewController.h
+    return [topVC respondsToSelector:@selector(instanceName)];
+}
+
 - (void)callCurrentAbilityOnForeground {
 #if HAS_ARKUI_X
+    if (![self _isStageViewControllerOnTop]) {
+        NSLog(@"[HAPManager] skip callCurrentAbilityOnForeground: topVC is not StageViewController");
+        return;
+    }
     [StageApplication callCurrentAbilityOnForeground];
 #endif
 }
 
 - (void)callCurrentAbilityOnBackground {
 #if HAS_ARKUI_X
+    if (![self _isStageViewControllerOnTop]) {
+        NSLog(@"[HAPManager] skip callCurrentAbilityOnBackground: topVC is not StageViewController");
+        return;
+    }
     [StageApplication callCurrentAbilityOnBackground];
 #endif
 }
