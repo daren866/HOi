@@ -99,7 +99,7 @@ jobs:
         TRIED_URLS=""
 
         for url in "${SDK_URLS[@]}"; do
-          TRIED_URLS="${TRIED_URLS}\n  - ${url}"
+          TRIED_URLS="${TRIED_URLS} - ${url}"
           echo "━━━ Trying: $url ━━━"
           HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
           echo "HTTP status: $HTTP_CODE"
@@ -309,16 +309,13 @@ jobs:
             # 也可能不包含 lib 前缀(按 xcframework 的 Info.plist 的 bundle name 链接)。
             # 直接按 FW_NAME 加 -framework, 链接器会自动在 FRAMEWORK_SEARCH_PATHS 中定位。
             FW_LINK_FLAGS="$FW_LINK_FLAGS -framework $FW_NAME"
-            EMBED_LIST="${EMBED_LIST}\n${FW_NAME}"
           done <<< "$FRAMEWORKS_IN_DIR"
 
           LIBRARY_SEARCH_PATHS="\$(SRCROOT)/Frameworks"
         fi
 
         echo "Header search paths count: $(echo "$HEADER_SEARCH_PATHS" | wc -w)"
-        echo "Framework search paths count: $(echo "$FRAMEWORK_SEARCH_PATHS" | grep -o 'FRAMEWORK_DIR' -c || true) (see below)"
         echo "Link flags: $FW_LINK_FLAGS"
-        echo "Embed list: $EMBED_LIST"
 
         if [ -n "$FW_LINK_FLAGS" ]; then
           echo "📝 Creating ArkUIOverrides.xcconfig (full SDK)"
@@ -365,9 +362,13 @@ jobs:
             echo "📦 Embedding ALL ArkUI XCFrameworks' device slices into app bundle..."
             mkdir -p "$APP_PATH/Frameworks"
             EMBEDDED_COUNT=0
-            while IFS= read -r FW_NAME; do
-              [ -z "$FW_NAME" ] && continue
-              SRC_FW="$FRAMEWORK_DIR/$FW_NAME.xcframework/ios-arm64/$FW_NAME.framework"
+            # 直接遍历 Frameworks/ 目录下的 xcframework, 不依赖 EMBED_LIST
+            # (之前 EMBED_LIST 用 \n 拼接, 但 bash 双引号内 \n 是字面字符不是换行,
+            #  导致 while read 只读到一行, 0 个 framework 被嵌入, ipa 只有 58.7KB)
+            for xcfw in "$FRAMEWORK_DIR"/*.xcframework; do
+              [ -d "$xcfw" ] || continue
+              FW_NAME=$(basename "$xcfw" .xcframework)
+              SRC_FW="$xcfw/ios-arm64/$FW_NAME.framework"
               if [ -d "$SRC_FW" ]; then
                 cp -R "$SRC_FW" "$APP_PATH/Frameworks/"
                 BIN="$APP_PATH/Frameworks/$FW_NAME.framework/$FW_NAME"
@@ -377,10 +378,14 @@ jobs:
                 fi
                 EMBEDDED_COUNT=$((EMBEDDED_COUNT+1))
                 echo "  + embedded $FW_NAME.framework ($(du -sh "$BIN" 2>/dev/null | cut -f1))"
+              else
+                echo "  ⚠️ no ios-arm64 slice for $FW_NAME, skipping"
               fi
-            done <<< "$EMBED_LIST"
+            done
             echo "✅ Embedded $EMBEDDED_COUNT frameworks into $APP_PATH/Frameworks/"
-            ls -la "$APP_PATH/Frameworks/"
+            ls -la "$APP_PATH/Frameworks/" | head -20
+            echo "  ... (total $(ls "$APP_PATH/Frameworks/" | wc -l | tr -d ' ') items)"
+            echo "  Frameworks dir size: $(du -sh "$APP_PATH/Frameworks/" | cut -f1)"
           fi
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
