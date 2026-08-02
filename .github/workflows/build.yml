@@ -81,8 +81,6 @@ jobs:
         # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
         # arm64: 541MB  x64: 515MB
         # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
-        # 注意: contentcenter-drcn (中国区 CDN) 可能对海外 GitHub Actions runner 不可达,
-        # 所以同时提供 contentcenter (全球 CDN) 镜像作为备选。
         SDK_URL_ARM64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
         SDK_URL_ARM64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
         SDK_URL_X64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
@@ -103,7 +101,7 @@ jobs:
         TRIED_URLS=""
 
         for url in "${SDK_URLS[@]}"; do
-          TRIED_URLS="${TRIED_URLS} - ${url}"
+          TRIED_URLS="$TRIED_URLS - $url"
           echo "━━━ Trying: $url ━━━"
           # 用 -L 跟随 302 重定向, 华为 CDN 会重定向到就近节点
           HTTP_CODE=$(curl -sIL "$url" -o /dev/null -w '%{http_code}' --max-time 15)
@@ -370,13 +368,9 @@ jobs:
             echo "📦 Embedding ALL ArkUI XCFrameworks' device slices into app bundle..."
             mkdir -p "$APP_PATH/Frameworks"
             EMBEDDED_COUNT=0
-            # 直接遍历 Frameworks/ 目录下的 xcframework, 不依赖 EMBED_LIST
-            # (之前 EMBED_LIST 用 \n 拼接, 但 bash 双引号内 \n 是字面字符不是换行,
-            #  导致 while read 只读到一行, 0 个 framework 被嵌入, ipa 只有 58.7KB)
-            for xcfw in "$FRAMEWORK_DIR"/*.xcframework; do
-              [ -d "$xcfw" ] || continue
-              FW_NAME=$(basename "$xcfw" .xcframework)
-              SRC_FW="$xcfw/ios-arm64/$FW_NAME.framework"
+            while IFS= read -r FW_NAME; do
+              [ -z "$FW_NAME" ] && continue
+              SRC_FW="$FRAMEWORK_DIR/$FW_NAME.xcframework/ios-arm64/$FW_NAME.framework"
               if [ -d "$SRC_FW" ]; then
                 cp -R "$SRC_FW" "$APP_PATH/Frameworks/"
                 BIN="$APP_PATH/Frameworks/$FW_NAME.framework/$FW_NAME"
@@ -386,33 +380,10 @@ jobs:
                 fi
                 EMBEDDED_COUNT=$((EMBEDDED_COUNT+1))
                 echo "  + embedded $FW_NAME.framework ($(du -sh "$BIN" 2>/dev/null | cut -f1))"
-              else
-                echo "  ⚠️ no ios-arm64 slice for $FW_NAME, skipping"
               fi
-            done
+            done <<< "$EMBED_LIST"
             echo "✅ Embedded $EMBEDDED_COUNT frameworks into $APP_PATH/Frameworks/"
-            ls -la "$APP_PATH/Frameworks/" | head -20
-            echo "  ... (total $(ls "$APP_PATH/Frameworks/" | wc -l | tr -d ' ') items)"
-            echo "  Frameworks dir size: $(du -sh "$APP_PATH/Frameworks/" | cut -f1)"
-
-            # 把 SDK 的 engine/systemres/ 拷贝到 app bundle 根目录,
-            # 运行时 HAPManager 会把它复制到 Documents/files/arkui-x/systemres/。
-            # systemres 包含: 系统 abc 字节码(theme/statemanagement/modifier/node 等 21 个)、
-            # 字体(HMSymbolVF.ttf/HarmonyOS_Sans_Notdef.ttf)、ICU 数据(icudt74l.dat 31MB)、
-            # resources.index、系统图标(svg)。缺这些运行时 LogWrapper::PrintLog 会因
-            # ICU 未初始化而 SIGSEGV (addr=0xa)。
-            # 注意: 当前工作目录是 ArkUIPlayer/, arkui-x-sdk 在上级目录, 用 GITHUB_WORKSPACE 绝对路径。
-            SYSTEMRES_SRC=$(find "$GITHUB_WORKSPACE/arkui-x-sdk" -type d -name "systemres" -path "*/engine/*" 2>/dev/null | head -1)
-            if [ -n "$SYSTEMRES_SRC" ] && [ -d "$SYSTEMRES_SRC" ]; then
-              echo "📦 Copying systemres from $SYSTEMRES_SRC to app bundle..."
-              cp -R "$SYSTEMRES_SRC" "$APP_PATH/"
-              echo "  systemres size: $(du -sh "$APP_PATH/systemres/" | cut -f1)"
-              ls "$APP_PATH/systemres/"
-            else
-              echo "⚠️ systemres not found in SDK! Runtime will crash without ICU data."
-              echo "  Searched: $GITHUB_WORKSPACE/arkui-x-sdk -type d -name systemres -path */engine/*"
-              find "$GITHUB_WORKSPACE/arkui-x-sdk" -name "systemres" -type d 2>/dev/null || true
-            fi
+            ls -la "$APP_PATH/Frameworks/"
           fi
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
