@@ -1518,7 +1518,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
     BOOL hasResourcesDir   = [fm fileExistsAtPath:resourcesDir];
 
     NSLog(@"[HAPManager] ========== Post-Install Diagnostics ==========");
-    NSLog(@"[HAPManager] bundleName=%@ moduleName=%@ abilityName=%@", bundleName, moduleName, appName);
+    NSLog(@"[HAPManager] bundleName=%@ moduleName=%@ abilityName=%@ appName=%@", bundleName, moduleName,
+          self.currentAbilityName.length ? self.currentAbilityName : @"(unknown)", appName);
     NSLog(@"[HAPManager] moduleDir=%@", moduleDir);
     NSLog(@"[HAPManager] resources.index exists=%d path=%@", hasResourcesIndex, resourcesIndexPath);
     NSLog(@"[HAPManager] pack.info       exists=%d path=%@", hasPackInfo, packInfoPath);
@@ -1609,50 +1610,49 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     continue;
                 }
 
-                // 基本白名单: 这些基础模块 iOS SDK 的 NAPI 模块都实现完整,不生成 shim,避免覆盖正确实现。
-                static NSArray<NSString *> *whitelistPrefixes = nil;
-                static dispatch_once_t onceTok;
-                dispatch_once(&onceTok, ^{
-                    whitelistPrefixes = @[
-                        // hilog / resourceManager / i18n 等常见 API, SDK 插件已完整实现
-                        @"@ohos:hilog",
-                        @"@ohos:resourceManager",
-                        @"@ohos:i18n",
-                        @"@ohos:util",
-                        @"@ohos:file.fs",
-                        @"@ohos:data_preferences",
-                        @"@ohos:buffer",
-                        @"@ohos:url",
-                        @"@ohos:uri",
-                        @"@ohos:timer",
-                        @"@ohos:deviceInfo",
-                        @"@ohos:convertxml",
-                        @"@ohos:xml",
-                        @"@ohos:zlib",
-                        @"@ohos:web.webview",
-                        @"@ohos:worker",
-                        @"@ohos:net.http",
-                        @"@ohos:net.socket",
-                        @"@ohos:nfc.cardEmulation",
-                        // 跨平台 UI 组件
-                        @"@arkui-x",
-                        // @kit.* 白名单: SDK 6.1.1.100 (API 24) 已内置 kit descriptor 解析
-                        @"@kit.ArkUI",
-                        @"@kit.AbilityKit",
-                        @"@kit.ArkTS",
-                        @"@kit.MediaKit",
-                        @"@kit.NetworkKit",
-                        @"@kit.FileKit",
-                        @"@kit.LocalizationKit",
-                        @"@kit.AnimationKit",
-                        @"@kit.NavigationKit",
-                    ];
-                });
-                BOOL skip = NO;
-                for (NSString *pref in whitelistPrefixes) {
-                    if ([s hasPrefix:pref]) { skip = YES; break; }
+                // ===== 核心策略修改 (2026-08-02 白屏修复) =====
+                // 之前:白名单跳过某些 @ohos:* 模块 → 大量原生模块被遗漏,生成 shim 覆盖正确实现 → 白屏。
+                // 现在:默认拒绝(黑名单允许)模式:
+                //   - @ohos:* 和 @kit.* → 默认全部跳过(ArkUI-X iOS SDK 已内置这些 NAPI 模块)
+                //   - @hms:* → 允许(这些是 HarmonyOS 端 HMS 生态专有,iOS 端 SDK 没提供)
+                //   - 其他命名空间模块 → 允许(如 @arkui-x:xxx 第三方跨平台模块)
+                // 这样只有确确实实在 iOS 端不存在的 HarmonyOS 专有模块才会生成 shim,
+                // 绝不触碰 ArkUI-X SDK 已经注册过的 @ohos:* / @kit.* 核心模块。
+                BOOL isHmsMod    = [s hasPrefix:@"@hms:"];
+                BOOL isOhosMod   = [s hasPrefix:@"@ohos:"];
+                BOOL isKitModNS  = [s hasPrefix:@"@kit."];
+                BOOL allowShim   = NO;
+                if (isHmsMod) {
+                    // HMS 生态专有模块(HDS 设计系统、系统分享等):iOS 端肯定没实现,允许生成 shim。
+                    allowShim = YES;
+                } else if (isOhosMod || isKitModNS) {
+                    // @ohos:* / @kit.*: **默认全部跳过**。
+                    // ArkUI-X iOS SDK 的 NAPI 层(libarkui_ios.xcframework 内嵌的 so)已经注册了这些模块,
+                    // 哪怕某些 API 具体函数未实现,ModuleResolver 也能找到 native module,
+                    // 一旦我们写本地 shim 放到 ets/modules/ 下反而会覆盖它,
+                    // 导致原本能工作的导出(比如 @ohos:arkui.node 的 NodeController 类)变成空 class → 组件不渲染 → 白屏。
+                    //
+                    // 例外清单:极少数 @ohos 下确确实实 iOS 端完全缺失、且 SDK 端计划外的模块才列在这里,
+                    // 但本着"不覆盖原生"的安全第一原则,目前例外清单暂时为空。
+                    static NSArray<NSString *> *ohosAllowlist = nil;
+                    static dispatch_once_t onceTok;
+                    dispatch_once(&onceTok, ^{
+                        ohosAllowlist = @[
+                            // 例: @"@ohos:some.module.truly.missing.on.ios",
+                        ];
+                    });
+                    for (NSString *pref in ohosAllowlist) {
+                        if ([s hasPrefix:pref]) { allowShim = YES; break; }
+                    }
+                    if (!allowShim) {
+                        // 默认:跳过 @ohos:* / @kit.*
+                        continue;
+                    }
+                } else {
+                    // 其他命名空间模块(如未来的 @arkui-x:xxx、@thirdparty:xxx):
+                    // 大概率是跨平台模块,iOS 端没有原生实现,允许生成 shim 兜底。
+                    allowShim = YES;
                 }
-                if (skip) { continue; }
 
                 // 为该模块在 moduleToImports 中创建条目
                 if (!moduleToImports[s]) {
@@ -1701,6 +1701,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     }
                 }
                 // 确保至少有一个 HdsNavigation 级别的兜底 (从前面的错误看最常见)
+                // 注意:只有 @hms:* 等经过 allowShim 筛选的模块才会进入到这里,
+                // @ohos:arkui.node 等原生模块已在上方过滤逻辑中跳过,不会再生成 shim。
                 if ([s containsString:@"hds"] || [s containsString:@"UIDesignKit"] || [s containsString:@"DesignKit"]) {
                     NSArray<NSString *> *knownHds = @[
                         @"HdsNavigation", @"HdsNavigationBar", @"HdsTabs", @"HdsButton",
@@ -1714,16 +1716,6 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                         @"HdsDivider", @"HdsImage", @"HdsTextArea", @"HdsSearch",
                     ];
                     for (NSString *k in knownHds) {
-                        [moduleToImports[s] addObject:k];
-                    }
-                }
-                // arkui.node 常见导出
-                if ([s isEqualToString:@"@ohos:arkui.node"]) {
-                    NSArray<NSString *> *knownNode = @[
-                        @"NodeController", @"NodeRenderType", @"Node", @"BuilderNode",
-                        @"FrameNode", @"ComponentContent", @"NodeType",
-                    ];
-                    for (NSString *k in knownNode) {
                         [moduleToImports[s] addObject:k];
                     }
                 }
