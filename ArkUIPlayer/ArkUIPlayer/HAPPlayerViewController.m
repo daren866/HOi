@@ -35,20 +35,26 @@
         NSString *instanceName = [NSString stringWithFormat:@"%@:%@:%@", safeBundleName, safeModuleName, safeAbilityName];
         self = [super initWithInstanceName:instanceName];
 #else
-        self = [super init];
+        // HAS_ARKUI_X 未开启时,父类 StageViewController.init 也是 NS_UNAVAILABLE,
+        // 无法创建父类实例。直接返回 nil,由调用方(HAPViewController)判断 nil 并展示报错。
+        NSLog(@"[HAPPlayer] ❌ HAS_ARKUI_X disabled, cannot create StageViewController");
+        if (manager) {
+            [manager showGlobalError:@"HAS_ARKUI_X 编译宏未开启,无法加载 HAP。请在 Xcode Build Settings 中启用 ArkUI-X 框架。" shortText:@"报错"];
+        }
+        return nil;
 #endif
     } @catch (NSException *e) {
         NSLog(@"[HAPPlayer] ❌ initWithInstanceName crashed: %@\n%@", e, e.callStackSymbols);
-        self = [super init];
-        if (self) {
-            self.errorOccurred = YES;
-            NSString *msg = [NSString stringWithFormat:@"initWithInstanceName: %@\n%@",
-                             e.reason ?: e.name ?: @"unknown",
-                             [e.callStackSymbols componentsJoinedByString:@"\n"]];
-            self.lastErrorMessage = msg;
+        // 注意:StageViewController 的 init 被 NS_UNAVAILABLE 标记,不能 [super init] 回退。
+        // 直接返回 nil,由调用方判断 nil 并走 showGlobalError(我们这里也调一次,双保险)。
+        NSString *msg = [NSString stringWithFormat:@"initWithInstanceName: %@\nReason: %@\n\nCallstack:\n%@",
+                         e.name ?: @"NSException",
+                         e.reason ?: @"unknown",
+                         [e.callStackSymbols componentsJoinedByString:@"\n"]];
+        if (manager) {
             [manager showGlobalError:msg shortText:@"报错"];
         }
-        return self;
+        return nil;
     }
 
     if (self) {

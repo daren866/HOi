@@ -264,6 +264,18 @@
                 return;
             }
 
+            // 关键:initWithHAPManager 内部可能因为 initWithInstanceName 异常而 return nil,
+            // 此时 HAPPlayerViewController 已经自己调用了 showGlobalError,我们这里再加一层 nil 检查,
+            // 避免 pushViewController:nil 触发新的崩溃,确保错误一定能显示出来。
+            if (!playerVC) {
+                NSLog(@"[HAPList] ❌ HAPPlayerViewController returned nil (init failed)");
+                if (self.hapManager && !self.hapManager.crashErrorWindow.hidden == NO) {
+                    // 如果 init 内部还没显示出错误(比如 manager 是 nil 的极端情况),兜底再显示一次
+                    [self.hapManager showGlobalError:@"HAPPlayerViewController 创建失败,无法打开 HAP。请检查 bundleName/moduleName/abilityName 是否与 module.json 匹配。" shortText:@"报错"];
+                }
+                return;
+            }
+
             // push 阶段也可能因为导航栏或 StageVC 内部触发 dispatch 而 abort,
             // 用 @try/@catch 包一下,失败则走全局错误 UI。
             @try {
