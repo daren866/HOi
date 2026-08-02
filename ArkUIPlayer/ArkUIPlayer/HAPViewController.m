@@ -330,6 +330,14 @@
     }];
 }
 
+// ArkUI-X 运行时内部会通过 libdispatch 异步调用 topViewController.instanceName,
+// 当列表页 HAPViewController 处于栈顶时(如 hap 加载完成但 HAPPlayerViewController 尚未 push 的间隙),
+// 它不是 StageViewController 子类,不响应 instanceName,触发 unrecognized selector 崩溃。
+// 返回 nil 让 ArkUI-X 运行时跳过该次调度,避免崩溃。
+- (NSString *)instanceName {
+    return nil;
+}
+
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         NSDictionary *hapInfo = self.hapInfoList[indexPath.row];

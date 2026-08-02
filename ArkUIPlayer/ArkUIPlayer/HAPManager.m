@@ -1,4 +1,5 @@
 #import "HAPManager.h"
+#import "HAPPlayerViewController.h"
 
 #if HAS_ARKUI_X
 // 仅 StageApplication.h 是 ArkUI-X framework 公开导出的头文件,
@@ -11,6 +12,35 @@
 #import <signal.h>
 #import <execinfo.h>
 #import <mach/mach.h>
+#import <objc/runtime.h>
+
+// ArkUI-X 运行时内部通过 getApplicationTopViewController 获取导航栈顶 VC,
+// 然后异步调用 instanceName。当栈顶是非 StageViewController(如 HAPViewController、
+// UINavigationController 等)时,会触发 unrecognized selector 崩溃。
+// 通过 +load 在 UIViewController 基类注入默认 instanceName 实现(返回 nil),
+// StageViewController 子类自己的 instanceName 会覆盖此默认实现,不受影响。
+@interface UIViewController (ArkUISafe)
+@end
+
+@implementation UIViewController (ArkUISafe)
++ (void)load {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        SEL sel = @selector(instanceName);
+        // class_getInstanceMethod 只搜索当前类及其父类,不会搜索子类。
+        // UIViewController 本身没有 instanceName(只有 StageViewController 子类有),
+        // 所以这里返回 NULL,然后 class_addMethod 添加默认实现。
+        Method m = class_getInstanceMethod(self, sel);
+        if (!m) {
+            IMP imp = imp_implementationWithBlock(^NSString *(id _self) {
+                return nil;
+            });
+            class_addMethod(self, sel, imp, "@@:");
+            NSLog(@"[HAPManager] UIViewController+ArkUISafe: added default instanceName to UIViewController base class");
+        }
+    });
+}
+@end
 
 // module.json 中常见字段名常量,用于解析 hap 的运行时入口信息。
 static NSString *const kDefaultModuleName = @"entry";
@@ -760,10 +790,12 @@ static HAPManager *_sharedInstance = nil;
 
 #pragma mark - Foreground / Background
 
-// 检查当前导航栈顶部的 VC 是否是 StageViewController(或其子类)。
+// 检查当前导航栈顶部的 VC 是否是 HAPPlayerViewController(StageViewController 子类)。
 // StageApplication callCurrentAbilityOnForeground/Background 内部会取 topVC 并调用 instanceName,
 // 如果 topVC 不是 StageViewController(比如列表页 HAPViewController),会触发
 // unrecognized selector instanceName 崩溃。这里提前拦截。
+// 注意:不能用 respondsToSelector:@selector(instanceName) 判断,因为 HAPViewController
+// 也实现了 instanceName(返回 nil)来防止 ArkUI-X 内部异步调用的崩溃,所以改用 isKindOfClass。
 - (BOOL)_isStageViewControllerOnTop {
     UIWindow *keyWindow = nil;
     for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
@@ -780,8 +812,7 @@ static HAPManager *_sharedInstance = nil;
     if ([topVC isKindOfClass:[UINavigationController class]]) {
         topVC = ((UINavigationController *)topVC).topViewController;
     }
-    // 用 respondsToSelector 判断,不需要 import StageViewController.h
-    return [topVC respondsToSelector:@selector(instanceName)];
+    return [topVC isKindOfClass:[HAPPlayerViewController class]];
 }
 
 - (void)callCurrentAbilityOnForeground {
