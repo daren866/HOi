@@ -56,6 +56,11 @@ typedef void (^HAPModuleInfoCompletion)(NSString *appName, NSString *bundleName,
 // 这是 hap 打开后闪退时依然能显示"报错"的关键手段 —— 因为 @try/@catch 拦不住 C++ abort。
 - (void)installCrashGuard;
 
+// 同 installCrashGuard,但 force=YES 时强制重新安装(忽略 g_crashGuardArmed 去重标志)。
+// 用于在 StageApplication configModule/launchApplication 调用前后重装,
+// 防止 ArkUI-X 内部 sigaction 把我们的 signal handler 覆盖掉。
+- (void)installCrashGuardForce:(BOOL)force;
+
 // 显式展示一个全局错误 UI(独立 Window,覆盖在整个 app 之上,不依赖任何 VC 的 view 层级)。
 // HAPPlayerViewController 的 showErrorMessage 内部也会通过该接口,保证错误 UI 不被 StageVC 覆盖。
 // message:详细错误信息(含 callstack);shortText:屏幕上简短显示的文字(默认"报错")。
