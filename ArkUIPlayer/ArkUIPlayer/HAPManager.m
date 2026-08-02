@@ -1528,6 +1528,282 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         NSLog(@"[HAPManager]    而不是将 entry-default-unsigned/ 中间产物目录直接打包。");
     }
 
+    // ---- 1b. 跨平台模块兼容性 shim ----
+    //
+    // 用户在 HarmonyOS(华为手机)上的 hap 常常引用:
+    //   - @hms:hds.* 系列 (HMS 设计系统 HDS 组件,仅 HarmonyOS 端闭源实现)
+    //   - @ohos:arkui.node 等 (某些 OHOS 专有模块,iOS/Android 端未编译进 SDK)
+    // 这些模块在 ArkUI-X iOS runtime 中:
+    //   - 要么完全没注册 NAPI 模块 (ModuleResolver 返回 undefined)
+    //   - 要么注册了但 abc 字节目录为空 (export objects of native so is undefined)
+    // 最终引发 SyntaxError: "the requested module '@hms:hds.hdsBaseComponent' does not provide an
+    // export name 'HdsNavigation' which imported by '&entry/src/main/ets/pages/Index&'"
+    // 这是 ES Module 的静态 import 校验失败, 属于 abc 解析阶段的 SyntaxError, 发生在任何
+    // 运行时代码之前, 无法通过 try/catch 捕获, 必须从模块层面让 import 解析到正确的导出。
+    //
+    // 处理方法:
+    //   1. 扫描所有 abc 文件中 import 的字符串明文 (abc 字节码中的 import specifier 和
+    //      imported binding 名都是 UTF-8 明文存储), 找出需要的模块和每个模块下需要导出
+    //      的标识符名。
+    //   2. 对 @hms:* / @ohos:* (非 @ohos:arkui 等基础模块) 这些在 iOS 端常见未实现的模块,
+    //      生成一个 JS shim, 用 export const/class/function 把所有被 import 的名字全部
+    //      导出为空占位, 然后写到 <moduleDir>/ets/modules/@hms/hds/hdsBaseComponent.ets
+    //      (命名空间冒号后部分转换为路径, "." 作为路径分隔)。
+    //   3. ArkUI-X 的 ModuleResolver 解析 @hms:hds.hdsBaseComponent 时, 会先在
+    //      ets/modules/ 下按路径查找本地模块文件, 命中后用该文件替换 native module,
+    //      import 校验通过, SyntaxError 消失。
+    //   4. UI 运行时 HDS 组件会渲染成空视图(占位), 但不会崩溃。
+    {
+        NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *moduleToImports =
+            [NSMutableDictionary dictionary];
+        // 遍历 module 下所有 .abc 文件
+        NSString *etsDir = [moduleDir stringByAppendingPathComponent:@"ets"];
+        NSArray *allSubpaths = [fm subpathsOfDirectoryAtPath:moduleDir error:nil];
+        NSMutableArray<NSString *> *abcPaths = [NSMutableArray array];
+        for (NSString *rel in allSubpaths) {
+            if ([rel.pathExtension isEqualToString:@"abc"]) {
+                [abcPaths addObject:[moduleDir stringByAppendingPathComponent:rel]];
+            }
+        }
+        NSLog(@"[HAPManager] Shim: scanning %lu abc files for imports", (unsigned long)abcPaths.count);
+
+        for (NSString *abcPath in abcPaths) {
+            NSData *abcData = [NSData dataWithContentsOfFile:abcPath options:0 error:nil];
+            if (abcData.length < 16) { continue; }
+            const unsigned char *bytes = (const unsigned char *)abcData.bytes;
+            const NSUInteger len = abcData.length;
+            // 滑动窗口扫字符串: 在 PANDA 文件中, 字符串是 \0 结尾的 UTF-8。
+            // 我们需要提取形如 "@hms:hds.hdsBaseComponent"、"@ohos:xxx" 的模块名,
+            // 以及紧跟在这些模块 import 记录中的绑定名 (HdsNavigation 等标识符)。
+            NSUInteger i = 0;
+            while (i < len) {
+                // 找模块 specifier 前缀 "@"
+                if (bytes[i] != '@') { i++; continue; }
+                NSUInteger start = i;
+                NSUInteger j = i;
+                while (j < len &&
+                       bytes[j] >= 0x20 && bytes[j] < 0x7F &&
+                       bytes[j] != '\0' && bytes[j] != '"' && bytes[j] != '\'' &&
+                       bytes[j] != ' '  && bytes[j] != '\n' && bytes[j] != '\r' &&
+                       bytes[j] != '\t') {
+                    j++;
+                }
+                if (j == start) { i++; continue; }
+                NSData *strData = [NSData dataWithBytesNoCopy:(void *)(bytes + start)
+                                                       length:j - start freeWhenDone:NO];
+                NSString *s = [[NSString alloc] initWithData:strData encoding:NSUTF8StringEncoding];
+                if (s.length == 0) { i = j + 1; continue; }
+                i = j + 1;
+                // 过滤有效模块名: 必须是 "@hms:" 或 "@ohos:" 前缀,且包含 ":" (命名空间分隔符)
+                if (!([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@ohos:"]) || ![s containsString:@":"]) {
+                    continue;
+                }
+                // 忽略内部模块前缀 "@ohos.abilityAccessCtrl" 等非命名空间格式
+                NSRange colon = [s rangeOfString:@":"];
+                if (colon.location == NSNotFound) { continue; }
+                NSString *nsPart = [s substringToIndex:colon.location + 1]; // "@hms:" / "@ohos:"
+                NSString *modPart = [s substringFromIndex:colon.location + 1];
+                if (modPart.length == 0) { continue; }
+
+                // 基本白名单: 这些基础模块 iOS SDK 的 NAPI 模块都实现完整,不生成 shim,避免覆盖正确实现。
+                // 其他比如 "@ohos:arkui.node"、所有 "@hms:*" 都是有问题的候选。
+                static NSArray<NSString *> *whitelistPrefixes = nil;
+                static dispatch_once_t onceTok;
+                dispatch_once(&onceTok, ^{
+                    whitelistPrefixes = @[
+                        // hilog / resourceManager / i18n 等常见 API, SDK 插件已完整实现
+                        @"@ohos:hilog",
+                        @"@ohos:resourceManager",
+                        @"@ohos:i18n",
+                        @"@ohos:util",
+                        @"@ohos:file.fs",
+                        @"@ohos:data_preferences",
+                        @"@ohos:buffer",
+                        @"@ohos:url",
+                        @"@ohos:uri",
+                        @"@ohos:timer",
+                        @"@ohos:deviceInfo",
+                        @"@ohos:convertxml",
+                        @"@ohos:xml",
+                        @"@ohos:zlib",
+                        @"@ohos:web.webview",
+                        @"@ohos:worker",
+                        @"@ohos:net.http",
+                        @"@ohos:net.socket",
+                        @"@ohos:nfc.cardEmulation",
+                        // 跨平台 UI 组件
+                        @"@arkui-x",
+                    ];
+                });
+                BOOL skip = NO;
+                for (NSString *pref in whitelistPrefixes) {
+                    if ([s hasPrefix:pref]) { skip = YES; break; }
+                }
+                if (skip) { continue; }
+
+                // 为该模块在 moduleToImports 中创建条目
+                if (!moduleToImports[s]) {
+                    moduleToImports[s] = [NSMutableSet set];
+                }
+
+                // 向后(从 j 开始)扫附近的字符串,收集与这个模块 import 相关的标识符名。
+                // 在 PANDA abc 的 literal/string sections 里, import specifier 后紧跟着 import binding。
+                // 做一个窗口 512 字节内的字符串收集, 合法标识符 ([A-Za-z_$][A-Za-z0-9_$]*).
+                NSMutableString *tok = [NSMutableString string];
+                for (NSUInteger k = j + 1; k < MIN(len, j + 1024); k++) {
+                    unsigned char c = bytes[k];
+                    if (c == '\0') {
+                        if (tok.length >= 1) {
+                            // 过滤掉关键字和常见非 binding 名
+                            if (![tok isEqualToString:@"default"] &&
+                                ![tok isEqualToString:@"null"] &&
+                                ![tok isEqualToString:@"true"] &&
+                                ![tok isEqualToString:@"false"] &&
+                                ![tok hasPrefix:@"__PANDA"]) {
+                                unichar first = [tok characterAtIndex:0];
+                                if ((first >= 'A' && first <= 'Z') || first == '_' || first == '$') {
+                                    // 大写开头的标识符 → 通常是 class/namespace/const import binding
+                                    [moduleToImports[s] addObject:tok.copy];
+                                } else if (first >= 'a' && first <= 'z') {
+                                    // 小写开头的函数名/常量也加入 (import { foo } from)
+                                    [moduleToImports[s] addObject:tok.copy];
+                                }
+                            }
+                        }
+                        tok = [NSMutableString string];
+                        continue;
+                    }
+                    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                        (c >= '0' && c <= '9') || c == '_' || c == '$') {
+                        [tok appendFormat:@"%c", (char)c];
+                    } else {
+                        if (tok.length >= 1) {
+                            unichar first = [tok characterAtIndex:0];
+                            if ((first >= 'A' && first <= 'Z') || first == '_' || first == '$' ||
+                                (first >= 'a' && first <= 'z')) {
+                                [moduleToImports[s] addObject:tok.copy];
+                            }
+                        }
+                        tok = [NSMutableString string];
+                    }
+                }
+                // 确保至少有一个 HdsNavigation 级别的兜底 (从前面的错误看最常见)
+                if ([s containsString:@"hds"]) {
+                    NSArray<NSString *> *knownHds = @[
+                        @"HdsNavigation", @"HdsNavigationBar", @"HdsTabs", @"HdsButton",
+                        @"HdsTextField", @"HdsText", @"HdsIcon", @"HdsSearchBar",
+                        @"HdsList", @"HdsListItem", @"HdsDialog", @"HdsSheet",
+                        @"HdsCard", @"HdsTag", @"HdsBadge", @"HdsAvatar",
+                        @"HdsProgress", @"HdsSlider", @"HdsSwitch", @"HdsStepper",
+                        @"HdsCheckbox", @"HdsRadio", @"HdsPicker", @"HdsDatePicker",
+                        @"HdsTimePicker", @"HdsNavBar", @"HdsToolbar", @"HdsSwiper",
+                        @"HdsGrid", @"HdsGridItem", @"HdsWaterFlow", @"HdsIndexer",
+                        @"HdsDivider", @"HdsImage", @"HdsTextArea", @"HdsSearch",
+                    ];
+                    for (NSString *k in knownHds) {
+                        [moduleToImports[s] addObject:k];
+                    }
+                }
+                // arkui.node 常见导出
+                if ([s isEqualToString:@"@ohos:arkui.node"]) {
+                    NSArray<NSString *> *knownNode = @[
+                        @"NodeController", @"NodeRenderType", @"Node", @"BuilderNode",
+                        @"FrameNode", @"ComponentContent", @"NodeType",
+                    ];
+                    for (NSString *k in knownNode) {
+                        [moduleToImports[s] addObject:k];
+                    }
+                }
+            }
+        }
+
+        if (moduleToImports.count == 0) {
+            NSLog(@"[HAPManager] Shim: no cross-platform missing modules detected");
+        } else {
+            NSLog(@"[HAPManager] Shim: generating shims for %lu missing modules",
+                  (unsigned long)moduleToImports.count);
+        }
+
+        // 生成 shim 文件
+        NSString *shimRoot = [etsDir stringByAppendingPathComponent:@"modules"];
+        for (NSString *modSpec in moduleToImports.allKeys) {
+            NSSet<NSString *> *imports = moduleToImports[modSpec];
+            if (imports.count == 0) { continue; }
+            // "@hms:hds.hdsBaseComponent" → ns="@hms", pathTail="hds.hdsBaseComponent"
+            NSRange colon = [modSpec rangeOfString:@":"];
+            NSString *ns = [modSpec substringToIndex:colon.location];
+            NSString *pathTail = [modSpec substringFromIndex:colon.location + 1];
+
+            // hds.hdsBaseComponent → hds/hdsBaseComponent
+            NSArray<NSString *> *parts = [pathTail componentsSeparatedByString:@"."];
+            NSMutableArray<NSString *> *pathComps = [NSMutableArray array];
+            [pathComps addObject:[ns stringByReplacingOccurrencesOfString:@"@" withString:@""]];
+            for (NSString *p in parts) {
+                if (p.length > 0) { [pathComps addObject:p]; }
+            }
+            NSString *fileName = pathComps.lastObject;
+            NSMutableArray<NSString *> *dirComps = [pathComps mutableCopy];
+            [dirComps removeLastObject];
+            NSString *shimDir = shimRoot;
+            for (NSString *d in dirComps) {
+                shimDir = [shimDir stringByAppendingPathComponent:d];
+            }
+            NSString *shimPath = [[shimDir stringByAppendingPathComponent:fileName]
+                                  stringByAppendingPathExtension:@"ets"];
+            NSError *mkErr = nil;
+            [fm createDirectoryAtPath:shimDir withIntermediateDirectories:YES attributes:nil error:&mkErr];
+
+            NSMutableString *content = [NSMutableString string];
+            [content appendString:@"// Auto-generated compatibility shim by HAPManager.\n"];
+            [content appendFormat:@"// Module: %@\n", modSpec];
+            [content appendString:@"// NOTE: HDS/HarmonyOS-only components are not available on iOS;\n"];
+            [content appendString:@"// this shim provides empty export placeholders so that ES module\n"];
+            [content appendString:@"// static import validation passes. Components render as empty views\n"];
+            [content appendString:@"// and will not crash the app.\n\n"];
+            for (NSString *name in imports) {
+                // 为每个 import 名生成占位。优先按命名约定判断。
+                unichar first = [name characterAtIndex:0];
+                if (first >= 'A' && first <= 'Z') {
+                    // 大写开头 → class 或 namespace
+                    if ([name hasSuffix:@"Controller"] ||
+                        [name isEqualToString:@"Node"] ||
+                        [name isEqualToString:@"BuilderNode"] ||
+                        [name isEqualToString:@"FrameNode"] ||
+                        [name isEqualToString:@"ComponentContent"]) {
+                        // class 导出
+                        [content appendFormat:@"export class %@ { constructor() {} }\n", name];
+                    } else if ([name hasSuffix:@"Type"] ||
+                               [name isEqualToString:@"NodeRenderType"]) {
+                        // enum 导出 → 对象字面量
+                        [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
+                    } else {
+                        // UI 组件 (HdsNavigation/HdsTabs/...) 导出空 class (会被当成自定义组件渲染成空)
+                        [content appendFormat:@"export class %@ { constructor() {} build() {} }\n", name];
+                    }
+                } else {
+                    // 小写开头 → 函数或常量
+                    [content appendFormat:@"export const %@ = function() {}; // eslint-disable-line\n", name];
+                }
+            }
+            // 总是额外导出 default 兜底
+            [content appendString:@"\nexport default undefined;\n"];
+
+            NSError *wrErr = nil;
+            BOOL ok = [content writeToFile:shimPath atomically:YES
+                                    encoding:NSUTF8StringEncoding error:&wrErr];
+            NSLog(@"[HAPManager] Shim: %@ → %@ (%lu exports) %@",
+                  modSpec, shimPath, (unsigned long)imports.count,
+                  ok ? @"✅ written" : [NSString stringWithFormat:@"❌ %@", wrErr]);
+        }
+        if (moduleToImports.count > 0) {
+            NSLog(@"[HAPManager] Shim: directory contents of %@", shimRoot);
+            NSArray *shimFiles = [fm subpathsOfDirectoryAtPath:shimRoot error:nil];
+            for (NSString *f in shimFiles) {
+                NSLog(@"[HAPManager] Shim:   %@", f);
+            }
+        }
+    }
+
     // 如果 resources 目录存在但 resources.index 缺失,尝试兜底:列出 resources/base/profile/ 下有什么,
     // 帮用户确认 main_pages.json 之类的配置文件是否在。
     if (hasResourcesDir) {

@@ -81,8 +81,6 @@ jobs:
         # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
         # arm64: 541MB  x64: 515MB
         # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
-        # 注意: contentcenter-drcn (中国区 CDN) 可能对海外 GitHub Actions runner 不可达,
-        # 所以同时提供 contentcenter (全球 CDN) 镜像作为备选。
         SDK_URL_ARM64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
         SDK_URL_ARM64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
         SDK_URL_X64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
@@ -103,7 +101,7 @@ jobs:
         TRIED_URLS=""
 
         for url in "${SDK_URLS[@]}"; do
-          TRIED_URLS="${TRIED_URLS} - ${url}"
+          TRIED_URLS="$TRIED_URLS - $url"
           echo "━━━ Trying: $url ━━━"
           # 用 -L 跟随 302 重定向, 华为 CDN 会重定向到就近节点
           HTTP_CODE=$(curl -sIL "$url" -o /dev/null -w '%{http_code}' --max-time 15)
