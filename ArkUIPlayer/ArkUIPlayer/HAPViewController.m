@@ -190,8 +190,14 @@
     NSString *bundleName = hapInfo[@"bundleName"] ?: @"";
     NSString *moduleName = hapInfo[@"moduleName"] ?: @"";
     NSString *abilityName = hapInfo[@"abilityName"] ?: @"";
-    // 在副标题里展示 hap 的入口三元组,方便确认 abc 字节码对应的运行入口是否被正确解析。
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ | %@:%@", bundleName, moduleName, abilityName];
+    NSString *pageName = hapInfo[@"pageName"] ?: @"";
+    // 在副标题里展示 hap 的入口三元组 + 入口界面名(若解析到 srcEntry),
+    // 方便确认 abc 字节码对应的运行入口是否被正确解析。
+    NSString *subtitle = [NSString stringWithFormat:@"%@ | %@:%@", bundleName, moduleName, abilityName];
+    if (pageName.length > 0) {
+        subtitle = [NSString stringWithFormat:@"%@ | page=%@", subtitle, pageName];
+    }
+    cell.detailTextLabel.text = subtitle;
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
     cell.detailTextLabel.textColor = [UIColor grayColor];
 
@@ -216,6 +222,8 @@
     NSString *bundleName = hapInfo[@"bundleName"] ?: @"com.example.hap";
     NSString *moduleName = hapInfo[@"moduleName"] ?: @"entry";
     NSString *abilityName = hapInfo[@"abilityName"] ?: @"EntryAbility";
+    NSString *appName = hapInfo[@"appName"] ?: [hapPath.lastPathComponent stringByDeletingPathExtension];
+    NSString *pageName = hapInfo[@"pageName"] ?: @"";
 
     [self.loadingIndicator startAnimating];
 
@@ -229,13 +237,16 @@
             [self.navigationController popToRootViewControllerAnimated:NO];
 
             // loadHAP 完成后,abc 字节码已经被 ArkUI 运行时加载并启动,
-            // 这里用从 module.json 解析出的 bundleName/moduleName/abilityName 创建播放 VC,
-            // StageViewController 会通过该 instanceName 触发 abc 渲染出的 ArkUI 页面挂载到屏幕上。
+            // 这里用从 module.json5/module.json 解析出的 bundleName/moduleName/abilityName
+            // 创建播放 VC,StageViewController 会通过该 instanceName 触发 abc 渲染出的 ArkUI 页面挂载到屏幕上。
+            // appName/pageName 也一并通过初始化方法传入,用于播放界面顶部展示当前应用名与入口界面。
             HAPPlayerViewController *playerVC = [[HAPPlayerViewController alloc]
                 initWithHAPManager:self.hapManager
                         bundleName:bundleName
                         moduleName:moduleName
-                       abilityName:abilityName];
+                       abilityName:abilityName
+                          appName:appName
+                         pageName:pageName];
 
             // 用 animated:YES 推入,等转场完成后再主动触发一次 foreground,
             // 因为 StageViewController.viewDidLoad 已经发过 DispatchOnForeground,
@@ -249,8 +260,17 @@
             [self.navigationController pushViewController:playerVC animated:YES];
             [CATransaction commit];
         } else {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加载失败" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+            // 加载 hap 失败:此时 hap 没成功加载,不能 push HAPPlayerViewController,
+            // 因为 StageViewController.viewDidLoad 会试图调用 AppMain::DispatchOnCreate 而 abc 未就绪,会闪退。
+            // 这里直接弹出 Alert,提供"复制错误"按钮把完整错误信息复制到剪贴板,便于用户反馈问题。
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加载失败"
+                                                                           message:errorMessage
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"复制错误" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                UIPasteboard *pb = [UIPasteboard generalPasteboard];
+                pb.string = errorMessage ?: @"";
+            }]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleCancel handler:nil]];
             [self presentViewController:alert animated:YES completion:nil];
         }
     }];
