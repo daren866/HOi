@@ -601,10 +601,34 @@ static HAPManager *_sharedInstance = nil;
                 // 在 configModule 之前重新安装 crash guard,防止上一次或本次 ArkUI-X 内部覆盖。
                 [self installCrashGuardForce:YES];
 
-                // 传入绝对路径(Documents/arkui-x),StageAssetManager 会扫描其下所有文件,
-                // 包括 {moduleName}/ets/modules.abc 与 {moduleName}/module.json 等。
-                NSLog(@"[HAPManager] configModuleWithBundleDirectory: %@", self.arkuiXDirectory);
-                [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
+                // StageAssetManager 的 moduleFilesWithbundleDirectory: 会把传入的 directory
+                // 拼接到 [[NSBundle mainBundle] bundlePath] 后面。如果传入绝对路径(以 / 开头),
+                // 拼接结果为 "app.app//var/mobile/..." 是无效路径,导致 all files count : 0。
+                // 必须传入相对于 main bundle 的相对路径,利用 .. 回溯到根目录再进入 Data 容器。
+                NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+                NSString *resolvedBundle = [bundlePath stringByResolvingSymlinksInPath];
+                NSString *resolvedTarget = [self.arkuiXDirectory stringByResolvingSymlinksInPath];
+                NSArray *bundleComps = [resolvedBundle pathComponents];
+                NSArray *targetComps = [resolvedTarget pathComponents];
+
+                NSUInteger commonCount = 0;
+                while (commonCount < bundleComps.count && commonCount < targetComps.count
+                       && [bundleComps[commonCount] isEqualToString:targetComps[commonCount]]) {
+                    commonCount++;
+                }
+
+                NSUInteger upCount = bundleComps.count - commonCount;
+                NSMutableArray *relativeParts = [NSMutableArray arrayWithCapacity:upCount + (targetComps.count - commonCount)];
+                for (NSUInteger i = 0; i < upCount; i++) {
+                    [relativeParts addObject:@".."];
+                }
+                for (NSUInteger i = commonCount; i < targetComps.count; i++) {
+                    [relativeParts addObject:targetComps[i]];
+                }
+                NSString *relativeDir = [relativeParts componentsJoinedByString:@"/"];
+
+                NSLog(@"[HAPManager] configModuleWithBundleDirectory: %@ (relative: %@)", self.arkuiXDirectory, relativeDir);
+                [StageApplication configModuleWithBundleDirectory:relativeDir];
 
                 // configModule 内部可能也注册了自己的 signal handler,再次重装确保我们的在最上层。
                 [self installCrashGuardForce:YES];
