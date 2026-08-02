@@ -13,6 +13,7 @@
 #import <execinfo.h>
 #import <mach/mach.h>
 #import <objc/runtime.h>
+#import <zlib.h>
 
 // ArkUI-X 运行时内部通过 getApplicationTopViewController 获取导航栈顶 VC,
 // 然后异步调用 instanceName。当栈顶是非 StageViewController(如 HAPViewController、
@@ -886,32 +887,217 @@ static HAPManager *_sharedInstance = nil;
 
 #pragma mark - ZIP extract helpers
 
+// ---- 纯 C ZIP 解压(libz),不依赖 /usr/bin/unzip(iOS 真机不存在该命令) ----
+// ZIP 文件格式:
+//   - Local File Header(0x04034b50)+ 压缩数据,每个文件一个
+//   - Central Directory(0x02014b50),每个文件一个条目
+//   - End of Central Directory Record(0x06054b50),文件末尾
+// 压缩方式:0=Stored(无压缩),8=Deflate( zlib inflate 解压)
+
+#define ZIP_LOCAL_HEADER_SIG  0x04034b50
+#define ZIP_CENTRAL_DIR_SIG   0x02014b50
+#define ZIP_END_CENTRAL_SIG   0x06054b50
+
+// 读取小端 32 位整数
+static uint32_t zip_read32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+// 读取小端 16 位整数
+static uint16_t zip_read16(const uint8_t *p) {
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+// 用 libz 解压 deflate 数据到输出 buffer
+static BOOL zip_inflate_data(const uint8_t *src, size_t srcLen, NSMutableData *dest) {
+    z_stream strm;
+    memset(&strm, 0, sizeof(strm));
+
+    // -15: raw deflate(无 zlib header),MAX_WBITS
+    if (inflateInit2(&strm, -15) != Z_OK) {
+        return NO;
+    }
+
+    strm.next_in = (Bytef *)src;
+    strm.avail_in = (uInt)srcLen;
+
+    // 分块解压
+    uint8_t buf[16384];
+    int ret;
+    do {
+        strm.next_out = buf;
+        strm.avail_out = sizeof(buf);
+        ret = inflate(&strm, Z_NO_FLUSH);
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            inflateEnd(&strm);
+            return NO;
+        }
+        size_t written = sizeof(buf) - strm.avail_out;
+        [dest appendBytes:buf length:written];
+    } while (ret != Z_STREAM_END);
+
+    inflateEnd(&strm);
+    return YES;
+}
+
+// 纯 C ZIP 解压:从 NSData 解压所有文件到 destDir
+static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
+    const uint8_t *bytes = (const uint8_t *)zipData.bytes;
+    size_t totalLen = zipData.length;
+    if (totalLen < 22) return NO; // EOCD 最小 22 字节
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 1. 从文件末尾查找 EOCD(End of Central Directory Record)
+    //    签名 0x06054b50,从末尾往前搜索(最多搜索 64KB + 22 字节)
+    size_t scanStart = totalLen > 65557 ? totalLen - 65557 : 0;
+    size_t eocdOffset = 0;
+    BOOL foundEOCD = NO;
+    for (size_t i = totalLen - 22; i >= scanStart; i--) {
+        if (zip_read32(bytes + i) == ZIP_END_CENTRAL_SIG) {
+            eocdOffset = i;
+            foundEOCD = YES;
+            break;
+        }
+    }
+    if (!foundEOCD) {
+        NSLog(@"[HAPManager] ZIP extract: EOCD not found");
+        return NO;
+    }
+
+    // 2. 从 EOCD 读取 Central Directory 偏移和条目数
+    const uint8_t *eocd = bytes + eocdOffset;
+    uint16_t numEntries = zip_read16(eocd + 10);
+    uint32_t cdOffset = zip_read32(eocd + 16);
+
+    if (cdOffset >= totalLen) {
+        NSLog(@"[HAPManager] ZIP extract: invalid CD offset %u", cdOffset);
+        return NO;
+    }
+
+    // 3. 遍历 Central Directory 条目
+    size_t offset = cdOffset;
+    for (uint16_t i = 0; i < numEntries; i++) {
+        if (offset + 46 > totalLen) break;
+        const uint8_t *cd = bytes + offset;
+        if (zip_read32(cd) != ZIP_CENTRAL_DIR_SIG) break;
+
+        uint16_t compressionMethod = zip_read16(cd + 10);
+        uint32_t compressedSize = zip_read32(cd + 20);
+        uint32_t uncompressedSize = zip_read32(cd + 24);
+        uint16_t fileNameLen = zip_read16(cd + 28);
+        uint16_t extraFieldLen = zip_read16(cd + 30);
+        uint16_t fileCommentLen = zip_read16(cd + 32);
+        uint32_t localHeaderOffset = zip_read32(cd + 42);
+
+        // 文件名
+        char fileName[1024];
+        size_t nameLen = fileNameLen < sizeof(fileName) - 1 ? fileNameLen : sizeof(fileName) - 1;
+        memcpy(fileName, cd + 46, nameLen);
+        fileName[nameLen] = '\0';
+
+        // 跳到下一个 CD 条目
+        offset += 46 + fileNameLen + extraFieldLen + fileCommentLen;
+
+        // 跳过目录条目(以 / 结尾)
+        if (nameLen > 0 && fileName[nameLen - 1] == '/') continue;
+
+        // 构建输出路径(防止路径穿越)
+        NSString *entryName = [NSString stringWithUTF8String:fileName];
+        if ([entryName containsString:@".."]) continue; // 安全:跳过路径穿越
+        NSString *outPath = [destDir stringByAppendingPathComponent:entryName];
+
+        // 创建父目录
+        NSString *parentDir = [outPath stringByDeletingLastPathComponent];
+        [fm createDirectoryAtPath:parentDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        // 4. 读取 Local File Header 获取数据偏移
+        if (localHeaderOffset + 30 > totalLen) continue;
+        const uint8_t *lh = bytes + localHeaderOffset;
+        if (zip_read32(lh) != ZIP_LOCAL_HEADER_SIG) continue;
+
+        uint16_t lhFileNameLen = zip_read16(lh + 26);
+        uint16_t lhExtraFieldLen = zip_read16(lh + 28);
+        size_t dataOffset = localHeaderOffset + 30 + lhFileNameLen + lhExtraFieldLen;
+
+        if (dataOffset + compressedSize > totalLen) continue;
+
+        // 5. 解压数据
+        const uint8_t *compData = bytes + dataOffset;
+        if (compressionMethod == 0) {
+            // Stored(无压缩)
+            [fm createFileAtPath:outPath contents:nil attributes:nil];
+            NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:outPath];
+            if (fh) {
+                [fh writeData:[NSData dataWithBytes:compData length:compressedSize]];
+                [fh closeFile];
+            }
+        } else if (compressionMethod == 8) {
+            // Deflate
+            NSMutableData *dest = [NSMutableData dataWithCapacity:uncompressedSize > 0 ? uncompressedSize : 4096];
+            if (zip_inflate_data(compData, compressedSize, dest)) {
+                [fm createFileAtPath:outPath contents:dest attributes:nil];
+            } else {
+                NSLog(@"[HAPManager] ZIP extract: inflate failed for %s", fileName);
+            }
+        } else {
+            NSLog(@"[HAPManager] ZIP extract: unsupported compression method %d for %s", compressionMethod, fileName);
+        }
+    }
+
+    NSLog(@"[HAPManager] ZIP extract: completed, %u entries processed", numEntries);
+    return YES;
+}
+
 - (BOOL)extractZIPFileAtPath:(NSString *)zipPath toDirectory:(NSString *)destDir {
     NSFileManager *fm = [NSFileManager defaultManager];
 
-    NSString *unzipPath = [destDir stringByAppendingPathComponent:@"unzip"];
-    if (![fm createDirectoryAtPath:unzipPath withIntermediateDirectories:YES attributes:nil error:nil]) {
+    if (![fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil]) {
         return NO;
     }
 
-    const char *args[] = {"/usr/bin/unzip", "-q", "-o", [zipPath UTF8String], "-d", [unzipPath UTF8String], NULL};
+    // 优先用 /usr/bin/unzip(模拟器上更快,且能处理一些边缘情况)。
+    // 失败或不可用时回退到纯 C libz 解压(真机兼容)。
+    BOOL useUnzip = NO;
+    if ([fm fileExistsAtPath:@"/usr/bin/unzip"]) {
+        NSString *unzipPath = [destDir stringByAppendingPathComponent:@"unzip_tmp"];
+        [fm createDirectoryAtPath:unzipPath withIntermediateDirectories:YES attributes:nil error:nil];
 
-    pid_t pid;
-    int status;
-    posix_spawn(&pid, "/usr/bin/unzip", NULL, NULL, (char * const *)args, NULL);
-    waitpid(pid, &status, 0);
+        const char *args[] = {"/usr/bin/unzip", "-q", "-o", [zipPath UTF8String], "-d", [unzipPath UTF8String], NULL};
+        pid_t pid;
+        int status = 0;
+        int spawnRet = posix_spawn(&pid, "/usr/bin/unzip", NULL, NULL, (char * const *)args, NULL);
+        if (spawnRet == 0) {
+            waitpid(pid, &status, 0);
+            if (WEXITSTATUS(status) == 0) {
+                // unzip 成功,把内容移到 destDir
+                if ([self moveExtractedContentsFrom:unzipPath to:destDir]) {
+                    [fm removeItemAtPath:unzipPath error:nil];
+                    useUnzip = YES;
+                }
+            }
+        }
+        [fm removeItemAtPath:unzipPath error:nil];
+    }
 
-    if (WEXITSTATUS(status) != 0) {
+    if (useUnzip) {
+        NSLog(@"[HAPManager] ZIP extracted via /usr/bin/unzip");
+        return YES;
+    }
+
+    // 回退:纯 C libz 解压(真机或 unzip 不可用时)
+    NSLog(@"[HAPManager] Falling back to libz ZIP extraction");
+    NSData *zipData = [NSData dataWithContentsOfFile:zipPath];
+    if (!zipData) {
+        NSLog(@"[HAPManager] Failed to read ZIP file at %@", zipPath);
         return NO;
     }
 
-    if (![self moveExtractedContentsFrom:unzipPath to:destDir]) {
-        return NO;
+    BOOL ok = zip_extract_nsdata(zipData, destDir);
+    if (!ok) {
+        NSLog(@"[HAPManager] libz ZIP extraction failed for %@", zipPath);
     }
-
-    [fm removeItemAtPath:unzipPath error:nil];
-
-    return YES;
+    return ok;
 }
 
 - (BOOL)moveExtractedContentsFrom:(NSString *)sourceDir to:(NSString *)destDir {
