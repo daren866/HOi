@@ -386,6 +386,24 @@ jobs:
             ls -la "$APP_PATH/Frameworks/" | head -20
             echo "  ... (total $(ls "$APP_PATH/Frameworks/" | wc -l | tr -d ' ') items)"
             echo "  Frameworks dir size: $(du -sh "$APP_PATH/Frameworks/" | cut -f1)"
+
+            # 把 SDK 的 engine/systemres/ 拷贝到 app bundle 根目录,
+            # 运行时 HAPManager 会把它复制到 Documents/files/arkui-x/systemres/。
+            # systemres 包含: 系统 abc 字节码(theme/statemanagement/modifier/node 等 21 个)、
+            # 字体(HMSymbolVF.ttf/HarmonyOS_Sans_Notdef.ttf)、ICU 数据(icudt74l.dat 31MB)、
+            # resources.index、系统图标(svg)。缺这些运行时 LogWrapper::PrintLog 会因
+            # ICU 未初始化而 SIGSEGV (addr=0xa)。
+            SYSTEMRES_SRC=$(find arkui-x-sdk -type d -name "systemres" -path "*/engine/*" | head -1)
+            if [ -n "$SYSTEMRES_SRC" ] && [ -d "$SYSTEMRES_SRC" ]; then
+              echo "📦 Copying systemres from SDK to app bundle..."
+              cp -R "$SYSTEMRES_SRC" "$APP_PATH/"
+              echo "  systemres size: $(du -sh "$APP_PATH/systemres/" | cut -f1)"
+              ls "$APP_PATH/systemres/"
+            else
+              echo "⚠️ systemres not found in SDK! Runtime will crash without ICU data."
+              echo "  Searched: arkui-x-sdk -type d -name systemres -path */engine/*"
+              find arkui-x-sdk -name "systemres" -type d
+            fi
           fi
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \

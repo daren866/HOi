@@ -239,6 +239,33 @@ static HAPManager *_sharedInstance = nil;
             [fm removeItemAtPath:legacyDir error:nil];
         }
 
+        // 把 app bundle 内的 systemres/ 复制到 Documents/files/arkui-x/systemres/。
+        // systemres 由 SDK 提供(engine/systemres/), 包含:
+        //   - 系统 abc 字节码 (theme/statemanagement/modifier/node 等 21 个)
+        //   - 字体 (HMSymbolVF.ttf / HarmonyOS_Sans_Notdef.ttf)
+        //   - ICU 数据 (icudt74l.dat 31MB) — 缺失会导致 LogWrapper::PrintLog SIGSEGV
+        //   - resources.index + 系统图标 (svg)
+        // build.yml 在构建时把 systemres/ 拷贝到 app.app/systemres/,
+        // 这里在首次启动时把它复制到 arkuiXDirectory 下, 使 runtime 能找到。
+        NSString *destSystemres = [self.arkuiXDirectory stringByAppendingPathComponent:@"systemres"];
+        if (![fm fileExistsAtPath:destSystemres]) {
+            NSString *bundledSystemres = [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"systemres"];
+            if ([fm fileExistsAtPath:bundledSystemres]) {
+                NSLog(@"[HAPManager] Copying bundled systemres to %@", destSystemres);
+                NSError *copyErr = nil;
+                if ([fm copyItemAtPath:bundledSystemres toPath:destSystemres error:&copyErr]) {
+                    NSLog(@"[HAPManager] ✅ systemres copied (%lu items)",
+                          (unsigned long)[[fm contentsOfDirectoryAtPath:destSystemres error:nil] count]);
+                } else {
+                    NSLog(@"[HAPManager] ❌ Failed to copy systemres: %@", copyErr);
+                }
+            } else {
+                NSLog(@"[HAPManager] ⚠️ No bundled systemres found at %@", bundledSystemres);
+            }
+        } else {
+            NSLog(@"[HAPManager] systemres already exists at %@", destSystemres);
+        }
+
         g_hapManagerSelf = (__bridge void *)self;
     }
     return self;
