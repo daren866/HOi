@@ -516,8 +516,15 @@ static HAPManager *_sharedInstance = nil;
             return;
         }
 
+        // hap 内容根目录:module.json5 所在目录。
+        // 标准 hap 解压后内容在根目录,但某些 hap(如 Windows 构建工具打包)会把内容
+        // 放在顶层目录(如 entry-default-unsigned/)下,这里用 parseModuleJsonInDirectory
+        // 返回的 _contentRoot 确保后续 abc 校验和安装都指向正确的内容目录。
+        NSString *contentRoot = moduleInfo[@"_contentRoot"] ?: extractDir;
+        NSLog(@"[HAPManager] Content root: %@ (extractDir: %@)", contentRoot, extractDir);
+
         // 校验解压结果中确实存在 abc 字节码文件,否则没必要继续。
-        if (![self containsAbcBytecodeInDirectory:extractDir]) {
+        if (![self containsAbcBytecodeInDirectory:contentRoot]) {
             [fm removeItemAtPath:extractDir error:nil];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, @"No ArkTS abc bytecode found in HAP");
@@ -545,7 +552,7 @@ static HAPManager *_sharedInstance = nil;
         //    的模块名注册,反而会导致 module.name 与 abc 模块名错位 → AppMain 找不到 abc 入口 → 闪退或白屏。
         // d) SDK 内部的 updateModuleNameWithJsonData: 也只在路径包含 bundleName.moduleName 时才改写
         //    module.name,标准产物路径不包含,所以不改写是预期行为。
-        if (![self installExtractedFilesFrom:extractDir
+        if (![self installExtractedFilesFrom:contentRoot
                                   moduleName:moduleName
                            toArkuiXDirectory:self.arkuiXDirectory]) {
             [fm removeItemAtPath:extractDir error:nil];
@@ -962,12 +969,32 @@ static HAPManager *_sharedInstance = nil;
         }
     }
 
+    // 兜底:某些 hap 打包时把内容放在顶层目录下(如 entry-default-unsigned/),
+    // 解压后 module.json5 不在根目录也不在 entry/ 下,而是在该顶层目录内。
+    // 递归搜索整个解压目录,找到第一个 module.json 或 module.json5。
     if (!moduleJsonPath) {
+        NSArray<NSString *> *allSubpaths = [fm subpathsOfDirectoryAtPath:extractDir error:nil];
+        for (NSString *subpath in allSubpaths) {
+            if ([subpath hasSuffix:@"/module.json"] || [subpath hasSuffix:@"/module.json5"]
+                || [subpath isEqualToString:@"module.json"] || [subpath isEqualToString:@"module.json5"]) {
+                // 排除 resources/ 下的同名文件(如 resources/base/profile/module.json)
+                if ([subpath containsString:@"resources/"]) continue;
+                moduleJsonPath = [extractDir stringByAppendingPathComponent:subpath];
+                isJson5 = [moduleJsonPath hasSuffix:@".json5"];
+                NSLog(@"[HAPManager] Found module config via recursive search: %@", moduleJsonPath);
+                break;
+            }
+        }
+    }
+
+    if (!moduleJsonPath) {
+        NSLog(@"[HAPManager] module.json/module.json5 not found in any candidate path or recursively under %@", extractDir);
         return nil;
     }
 
     NSData *rawData = [NSData dataWithContentsOfFile:moduleJsonPath];
     if (!rawData) {
+        NSLog(@"[HAPManager] Failed to read data from %@", moduleJsonPath);
         return nil;
     }
 
@@ -975,13 +1002,24 @@ static HAPManager *_sharedInstance = nil;
     // NSJSONSerialization 不支持,需要先剥离这些扩展语法再解析。
     NSData *jsonData = rawData;
     if (isJson5) {
+        // 优先尝试 UTF-8,失败则尝试 UTF-16(某些 Windows 构建工具可能输出 UTF-16 BOM)。
         NSString *json5String = [[NSString alloc] initWithData:rawData encoding:NSUTF8StringEncoding];
+        if (!json5String) {
+            json5String = [[NSString alloc] initWithData:rawData encoding:NSUTF16StringEncoding];
+            NSLog(@"[HAPManager] module.json5 was not UTF-8, retrying with UTF-16");
+        }
+        if (!json5String) {
+            NSLog(@"[HAPManager] Failed to decode module.json5 as UTF-8 or UTF-16");
+            return nil;
+        }
         NSString *stripped = [self stripJson5Comments:json5String];
         if (stripped.length == 0) {
+            NSLog(@"[HAPManager] stripJson5Comments returned empty string for %@", moduleJsonPath);
             return nil;
         }
         jsonData = [stripped dataUsingEncoding:NSUTF8StringEncoding];
         if (!jsonData) {
+            NSLog(@"[HAPManager] Failed to encode stripped JSON5 to UTF-8");
             return nil;
         }
     }
@@ -994,6 +1032,11 @@ static HAPManager *_sharedInstance = nil;
     }
 
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
+
+    // 记录 module.json5 所在目录,作为 hap 内容根目录,
+    // 供 loadHAPAtPath 用于 installExtractedFilesFrom 和 containsAbcBytecodeInDirectory。
+    NSString *contentRoot = [moduleJsonPath stringByDeletingLastPathComponent];
+    result[@"_contentRoot"] = contentRoot;
 
     NSDictionary *appObj = jsonDict[@"app"];
     NSDictionary *moduleObj = jsonDict[@"module"];
