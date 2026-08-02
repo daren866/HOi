@@ -1,6 +1,7 @@
 #import "AppDelegate.h"
 #import "HAPManager.h"
 #import "HAPViewController.h"
+#import "LogFloatingButton.h"
 
 @interface AppDelegate ()
 
@@ -34,6 +35,10 @@
 
     self.window.rootViewController = nav;
     [self.window makeKeyAndVisible];
+
+    // 显示悬浮日志按钮:正圆形绿色,可拖动,点击复制应用日志到剪贴板。
+    // 在所有初始化完成后启动,确保能捕获到后续所有 NSLog 输出。
+    [[LogFloatingButton sharedButton] show];
 
     return YES;
 }

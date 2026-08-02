@@ -601,10 +601,34 @@ static HAPManager *_sharedInstance = nil;
                 // 在 configModule 之前重新安装 crash guard,防止上一次或本次 ArkUI-X 内部覆盖。
                 [self installCrashGuardForce:YES];
 
-                // 传入绝对路径(Documents/arkui-x),StageAssetManager 会扫描其下所有文件,
-                // 包括 {moduleName}/ets/modules.abc 与 {moduleName}/module.json 等。
-                NSLog(@"[HAPManager] configModuleWithBundleDirectory: %@", self.arkuiXDirectory);
-                [StageApplication configModuleWithBundleDirectory:self.arkuiXDirectory];
+                // StageAssetManager 的 moduleFilesWithbundleDirectory: 会把传入的 directory
+                // 拼接到 [[NSBundle mainBundle] bundlePath] 后面。如果传入绝对路径(以 / 开头),
+                // 拼接结果为 "app.app//var/mobile/..." 是无效路径,导致 all files count : 0。
+                // 必须传入相对于 main bundle 的相对路径,利用 .. 回溯到根目录再进入 Data 容器。
+                NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+                NSString *resolvedBundle = [bundlePath stringByResolvingSymlinksInPath];
+                NSString *resolvedTarget = [self.arkuiXDirectory stringByResolvingSymlinksInPath];
+                NSArray *bundleComps = [resolvedBundle pathComponents];
+                NSArray *targetComps = [resolvedTarget pathComponents];
+
+                NSUInteger commonCount = 0;
+                while (commonCount < bundleComps.count && commonCount < targetComps.count
+                       && [bundleComps[commonCount] isEqualToString:targetComps[commonCount]]) {
+                    commonCount++;
+                }
+
+                NSUInteger upCount = bundleComps.count - commonCount;
+                NSMutableArray *relativeParts = [NSMutableArray arrayWithCapacity:upCount + (targetComps.count - commonCount)];
+                for (NSUInteger i = 0; i < upCount; i++) {
+                    [relativeParts addObject:@".."];
+                }
+                for (NSUInteger i = commonCount; i < targetComps.count; i++) {
+                    [relativeParts addObject:targetComps[i]];
+                }
+                NSString *relativeDir = [relativeParts componentsJoinedByString:@"/"];
+
+                NSLog(@"[HAPManager] configModuleWithBundleDirectory: %@ (relative: %@)", self.arkuiXDirectory, relativeDir);
+                [StageApplication configModuleWithBundleDirectory:relativeDir];
 
                 // configModule 内部可能也注册了自己的 signal handler,再次重装确保我们的在最上层。
                 [self installCrashGuardForce:YES];
@@ -1499,7 +1523,7 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
     }
 
-    // ets 目录下 abc 文件完整列表
+    // ets 目录下 abc 文件完整列表 + Panda 字节码版本检查。
     NSString *etsDir = [moduleDir stringByAppendingPathComponent:@"ets"];
     NSDirectoryEnumerator *etsEnum = [fm enumeratorAtPath:etsDir];
     NSMutableArray<NSString *> *abcFiles = [NSMutableArray array];
@@ -1509,6 +1533,45 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
     }
     NSLog(@"[HAPManager] ets/*.abc files (%lu): %@", (unsigned long)abcFiles.count, abcFiles);
+
+    // 检测每个 abc 的 Panda bytecode 版本。
+    // ⚠️ 不再硬编码 max supported version 并 showGlobalError 阻止启动:
+    //   不同版本的 libarkui_ios.xcframework 内嵌的 panda_file::File::MAX_SUPPORTED_VERSION
+    //   是编译期常量,以字符串以外的形式存在,无法从外部可靠探测。为了兼容升级 5.0.x SDK
+    //   后支持 bytecode 12.x 的情况,这里只打印检测到的版本并提醒用户:如果后续 runtime
+    //   报 "Maximum supported version is X.X.X.X" 错误,则把 iOS 壳工程内的 ArkUI-X SDK
+    //   (libarkui_ios.xcframework + libhilog/libresourcemanager/... 等全部 framework)
+    //   升级到与打包 hap 同一 SDK 版本即可。
+    // Panda abc 头格式:magic("PANDA" 5 bytes)+version(major.minor.patch.build,4 uint8,通常大端)。
+    for (NSString *abcRel in abcFiles) {
+        NSString *abcFull = [etsDir stringByAppendingPathComponent:abcRel];
+        NSData *header = [NSData dataWithContentsOfFile:abcFull options:0 error:nil];
+        if (header.length < 9) continue;
+
+        const unsigned char *bytes = (const unsigned char *)header.bytes;
+        if (!(bytes[0]=='P' && bytes[1]=='A' && bytes[2]=='N' && bytes[3]=='D' && bytes[4]=='A')) {
+            continue;
+        }
+        int major = bytes[5];
+        int minor = bytes[6];
+        int patch = bytes[7];
+        int build = bytes[8];
+        NSLog(@"[HAPManager] abc %@ panda bytecode version=%d.%d.%d.%d",
+              abcRel, major, minor, patch, build);
+
+        // 只在检测到 bytecode 主版本 >= 10(即 API 11+,12.0.6.0 对应的 Restool 6.1)时,
+        // 打印一条显眼的提醒:若 ArkUI-X SDK 尚未升级,运行时将无法加载并输出
+        // "Maximum supported version is X"。用户点悬浮日志按钮可复制查看完整日志。
+        if (major >= 10) {
+            NSLog(@"[HAPManager] ⚠️ abc bytecode 版本=%d.x (API 12+ 对应 12.x 很常见)", major);
+            NSLog(@"[HAPManager] ⚠️ 如后续出现 'Unable to open file ... with bytecode version %d.%d.%d.%d'",
+                  major, minor, patch, build);
+            NSLog(@"[HAPManager] ⚠️ 和 'Maximum supported version is X.0.0.0' 报错:");
+            NSLog(@"[HAPManager] ⚠️ 请将 iOS 壳工程的 ArkUI-X SDK (libarkui_ios.xcframework 以及"
+                  @" libhilog/libresourcemanager/libcrypto/libcurl 等全部 framework) 升级到与打包"
+                  @" hap 时相同的 SDK 版本,以便 runtime 支持 bytecode %d.x。", major);
+        }
+    }
     NSLog(@"[HAPManager] =====================================================");
 
     // ---- 2. 合成 AppScope/app.json (若缺失) ----

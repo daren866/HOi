@@ -67,74 +67,87 @@ jobs:
           echo "⚠️ ACE Tools installation failed"
         fi
 
-    - name: Download ArkUI-X SDK from official Huawei mirror
+    - name: Download ArkUI-X SDK 6.1.1.100 (API 24, bytecode 12.x)
       run: |
-        echo "🔍 Downloading ArkUI-X SDK from official Huawei mirror..."
-        
-        SDK_URLS=(
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/0.0.9.6/darwin/arkui-x-darwin-x64-0.0.9.6-Canary1.zip"
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/0.0.9.6/darwin/arkui-x-darwin-arm64-0.0.9.6-Canary1.zip"
-        )
-        
+        echo "🔍 Downloading ArkUI-X SDK 6.1.1.100 (API 24, Release) from official Huawei CDN..."
+        echo "目标: 支持 bytecode 12.0.6.0 (DevEco Studio 6.1.1.300 配套 SDK)"
+        echo "直链来源: repo.harmonyos.com/sdkmanager/crossPlatform/getSdkList GRS 服务返回"
+        echo ""
+
+        # 检测 CI runner 架构, 优先下载匹配的 SDK
+        HOST_ARCH=$(uname -m)
+        echo "Host architecture: $HOST_ARCH"
+
+        # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
+        # arm64: 541MB  x64: 515MB
+        # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
+        SDK_URL_ARM64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_X64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+
+        # 回退: 旧版 1.0.0.0 (API 10, bytecode 9.x) — 仅在前者全失败时使用
+        SDK_URL_FALLBACK_ARM64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-arm64-1.0.0.0-Release.zip"
+        SDK_URL_FALLBACK_X64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-x64-1.0.0.0-Release.zip"
+
+        # 按架构优先排列, 再回退到另一架构, 最后旧版
+        if [ "$HOST_ARCH" = "arm64" ]; then
+          SDK_URLS=("$SDK_URL_ARM64" "$SDK_URL_X64" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
+        else
+          SDK_URLS=("$SDK_URL_X64" "$SDK_URL_ARM64" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
+        fi
+
         DOWNLOAD_SUCCESS=0
-        
+        TRIED_URLS=""
+
         for url in "${SDK_URLS[@]}"; do
-          echo "Trying: $url"
-          echo "Checking URL availability..."
-          curl -sI "$url" | head -5
-          
-          echo "Starting download with wget (supports resume)... "
-          if wget -c "$url" -O arkui-x-sdk.zip --timeout=60 --tries=5 --waitretry=10; then
+          TRIED_URLS="$TRIED_URLS
+  - $url"
+          echo "━━━ Trying: $url ━━━"
+          HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
+          echo "HTTP status: $HTTP_CODE"
+          [ "$HTTP_CODE" != "200" ] && { echo "⚠️ Not available, skipping"; continue; }
+
+          echo "Starting download..."
+          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 600 --retry 2 --retry-delay 5; then
             file_size=$(wc -c < arkui-x-sdk.zip)
-            echo "File size: $file_size bytes"
-            
-            if [ "$file_size" -gt 1000000 ]; then
-              echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
-              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
+            echo "Downloaded: $file_size bytes ($(($file_size/1024/1024))MB)"
+
+            if [ "$file_size" -gt 50000000 ]; then
+              echo "✅ Valid SDK zip, unzipping..."
+              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1 | tail -3
               rm arkui-x-sdk.zip
-              
-              echo "📁 SDK directory contents:"
-              ls -la arkui-x-sdk/ 2>/dev/null || echo "arkui-x-sdk directory is empty"
-              find arkui-x-sdk -type f | head -50
-              
-              echo "✅ SDK downloaded successfully"
-              DOWNLOAD_SUCCESS=1
-              break
+
+              echo ""
+              echo "📁 SDK manifest:"
+              find arkui-x-sdk -maxdepth 2 \( -name "arkui-x.json" -o -name "sdkConfig.json" \) | while read m; do
+                echo "--- $m ---"
+                cat "$m"
+              done
+
+              echo ""
+              XCFW_COUNT=$(find arkui-x-sdk -name "*.xcframework" -type d | wc -l | tr -d ' ')
+              echo "📁 SDK contains $XCFW_COUNT XCFrameworks"
+
+              # 校验核心 framework 存在
+              if find arkui-x-sdk -name "libarkui_ios.xcframework" -type d | grep -q .; then
+                echo "✅ Core libarkui_ios.xcframework found"
+                DOWNLOAD_SUCCESS=1
+                break
+              else
+                echo "⚠️ libarkui_ios.xcframework not found in this SDK, trying next URL..."
+                rm -rf arkui-x-sdk
+              fi
             else
               echo "⚠️ File too small ($file_size bytes), skipping"
               rm arkui-x-sdk.zip
             fi
           else
-            echo "⚠️ wget download failed, trying curl..."
-            
-            if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 900 --retry 3 --retry-delay 5 --continue-at -; then
-              file_size=$(wc -c < arkui-x-sdk.zip)
-              echo "File size: $file_size bytes"
-              
-              if [ "$file_size" -gt 1000000 ]; then
-                echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
-                unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
-                rm arkui-x-sdk.zip
-                
-                echo "📁 SDK directory contents:"
-                ls -la arkui-x-sdk/ 2>/dev/null || echo "arkui-x-sdk directory is empty"
-                find arkui-x-sdk -type f | head -50
-                
-                echo "✅ SDK downloaded successfully"
-                DOWNLOAD_SUCCESS=1
-                break
-              else
-                echo "⚠️ File too small ($file_size bytes), skipping"
-                rm arkui-x-sdk.zip
-              fi
-            else
-              echo "⚠️ Download failed: $url"
-            fi
+            echo "⚠️ Download failed: $url"
           fi
         done
-        
+
         if [ "$DOWNLOAD_SUCCESS" -eq 0 ]; then
           echo "❌ Failed to download ArkUI-X SDK from all sources!"
+          echo "Tried URLs: $TRIED_URLS"
           exit 1
         fi
 
@@ -168,47 +181,68 @@ jobs:
 
     - name: Copy ArkUI-X framework to project
       run: |
-        echo "🔍 Copying ArkUI-X framework to project..."
-        
+        echo "🔍 Copying ALL ArkUI-X XCFrameworks to project (engine + plugins)..."
+        echo "⚠️ 1.0.0.0+ 与 5.0.x SDK 不再是单文件 libarkui_ios,而是几十个 xcframework:"
+        echo "   engine/libarkui_ios + 第三方(libcrypto/libcurl/libxml2/libnghttp2/libssl)"
+        echo "   + plugins/api(libhilog/libresourcemanager/libi18n/libfont/librouter/libworker"
+        echo "     libweb_webview/libnet_*/libfile_fs/libdata_preferences/...) 等,"
+        echo "   缺一个都会导致链接或启动崩溃。完整复制 SDK 内所有 xcframework。"
+
         echo "📋 Listing all XCFramework files in SDK..."
-        find arkui-x-sdk -name "*.xcframework" -type d
-        
-        ARKUI_XCFRAMEWORK=$(find arkui-x-sdk -name "libarkui_ios.xcframework" -type d | head -1)
-        
-        if [ -z "$ARKUI_XCFRAMEWORK" ]; then
-          echo "⚠️ libarkui_ios.xcframework not found, searching for other arkui XCFrameworks..."
-          find arkui-x-sdk -name "*arkui*.xcframework" -type d
-          
-          ARKUI_XCFRAMEWORK=$(find arkui-x-sdk -name "*arkui*.xcframework" -type d | head -1)
-        fi
-        
+        # ⚠️ 1.0.0.0+ SDK 中, xcframework 目录存在重复镜像:
+        #   engine/xcframework/third_party/ios-release/*.xcframework
+        #   engine/xcframework/xcframework/third_party/build_modes/*.xcframework  ← 重复镜像
+        # 两个目录内容完全一样。为了后续 FRAMEWORK_SEARCH_PATHS / 链接路径稳定,
+        # 只保留 ios-release 目录下的"主路径"版本,排除 build_modes 镜像。
+        ALL_XCFR=$(find arkui-x-sdk \
+          \( -path "*/ios-release/*.xcframework" \) \
+          -type d | sort -u)
+        echo "$ALL_XCFR"
+        TOTAL=$(echo "$ALL_XCFR" | grep -c . || true)
+        echo "Total XCFrameworks to copy (ios-release only, deduped): $TOTAL"
+
         mkdir -p ArkUIPlayer/Frameworks
-        
-        if [ -n "$ARKUI_XCFRAMEWORK" ]; then
-          echo "✅ Found ArkUI XCFramework at: $ARKUI_XCFRAMEWORK"
-          cp -r "$ARKUI_XCFRAMEWORK" ArkUIPlayer/Frameworks/
-          echo "✅ Copied XCFramework to Frameworks"
+
+        if [ "$TOTAL" -gt 0 ]; then
+          # while read 避免 IFS 问题
+          while IFS= read -r xc; do
+            [ -z "$xc" ] && continue
+            cp -r "$xc" ArkUIPlayer/Frameworks/
+          done <<< "$ALL_XCFR"
+          echo "✅ Copied $TOTAL XCFrameworks into ArkUIPlayer/Frameworks/"
         else
-          echo "❌ No ArkUI framework found!"
-          exit 1
+          echo "❌ No XCFramework found in SDK under ios-release paths!"
+          echo "Fallback: scan any *.xcframework (old SDK layout)..."
+          ALL_XCFR=$(find arkui-x-sdk -name "*.xcframework" -type d | sort -u)
+          TOTAL=$(echo "$ALL_XCFR" | grep -c . || true)
+          if [ "$TOTAL" -gt 0 ]; then
+            while IFS= read -r xc; do
+              [ -z "$xc" ] && continue
+              cp -r "$xc" ArkUIPlayer/Frameworks/
+            done <<< "$ALL_XCFR"
+            echo "✅ Fallback: copied $TOTAL XCFrameworks"
+          else
+            echo "❌ Still no XCFramework found!"
+            exit 1
+          fi
         fi
-        
+
         echo "📁 Frameworks directory contents:"
-        ls -la ArkUIPlayer/Frameworks/
-        
-        if [ -d "ArkUIPlayer/Frameworks/libarkui_ios.xcframework" ]; then
-          echo "✅ libarkui_ios.xcframework found in project"
-          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
-          echo "✅ Set HAS_ARKUI_X=1"
-        elif [ -d "ArkUIPlayer/Frameworks/libarkui_ios.framework" ]; then
-          echo "✅ libarkui_ios.framework found in project"
+        ls -la ArkUIPlayer/Frameworks/ | head -40
+
+        COPIED_CORE=0
+        [ -d "ArkUIPlayer/Frameworks/libarkui_ios.xcframework" ] && COPIED_CORE=1
+        [ -d "ArkUIPlayer/Frameworks/libhilog.xcframework" ] && echo "✅ Plugins API: libhilog found"
+        [ -d "ArkUIPlayer/Frameworks/libresourcemanager.xcframework" ] && echo "✅ Plugins API: libresourcemanager found"
+        [ -d "ArkUIPlayer/Frameworks/libcrypto_openssl.xcframework" ] && echo "✅ Third-party: libcrypto_openssl found"
+
+        if [ "$COPIED_CORE" -eq 1 ]; then
+          echo "✅ Core XCFramework (libarkui_ios) found in project"
           sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
           echo "✅ Set HAS_ARKUI_X=1"
         else
-          FRAMEWORK_NAME=$(basename "$ARKUI_XCFRAMEWORK")
-          echo "⚠️ Using $FRAMEWORK_NAME instead of libarkui_ios"
-          sed -i '' 's/#define HAS_ARKUI_X 0/#define HAS_ARKUI_X 1/' ArkUIPlayer/ArkUIPlayer/HAPManager.h
-          echo "✅ Set HAS_ARKUI_X=1"
+          echo "❌ Core libarkui_ios not among copied frameworks!"
+          exit 1
         fi
 
     - name: Build ArkUIPlayer using xcodebuild
@@ -228,63 +262,86 @@ jobs:
         echo "📁 Framework directory contents:"
         ls -la "$FRAMEWORK_DIR" 2>/dev/null || echo "Directory does not exist"
         
-        FRAMEWORKS_IN_DIR=$(ls -la "$FRAMEWORK_DIR" 2>/dev/null | grep xcframework | awk '{print $9}')
-        
+        # find 所有 xcframework 名字(避免空格+按字典序),支持任意数量的新 xcframework。
+        FRAMEWORKS_IN_DIR=$(find "$FRAMEWORK_DIR" -maxdepth 1 -name "*.xcframework" -type d -exec basename {} \; | sort)
+
         HEADER_SEARCH_PATHS=""
+        FRAMEWORK_SEARCH_PATHS=""
         LIBRARY_SEARCH_PATHS=""
-        OTHER_LDFLAGS=""
-        
+        FW_LINK_FLAGS=""
+        EMBED_LIST=""
+
         if [ -n "$FRAMEWORKS_IN_DIR" ]; then
-          echo "Found frameworks in Frameworks: $FRAMEWORKS_IN_DIR"
-          
-          for fw in $FRAMEWORKS_IN_DIR; do
+          echo "Found frameworks in Frameworks:"
+          echo "$FRAMEWORKS_IN_DIR" | nl
+
+          while IFS= read -r fw; do
+            [ -z "$fw" ] && continue
             FW_NAME=$(echo "$fw" | sed 's/\.xcframework$//')
             echo "Processing framework: $FW_NAME"
-            
+
             echo "📁 XCFramework internal structure:"
             ls -la "$FRAMEWORK_DIR/$fw/"
-            
+
             echo "📁 ios-arm64 directory contents:"
-            ls -la "$FRAMEWORK_DIR/$fw/ios-arm64/"
-            
+            ls -la "$FRAMEWORK_DIR/$fw/ios-arm64/" 2>/dev/null || echo "(no ios-arm64 slice?)"
+
             HEADER_PATH="$FRAMEWORK_DIR/$fw/ios-arm64/$FW_NAME.framework/Headers"
             HEADER_PATH_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator/$FW_NAME.framework/Headers"
-            
-            echo "Checking header path: $HEADER_PATH"
+            SLICE_DEV="$FRAMEWORK_DIR/$fw/ios-arm64"
+            SLICE_SIM="$FRAMEWORK_DIR/$fw/ios-arm64_x86_64-simulator"
+
             if [ -d "$HEADER_PATH" ]; then
-              echo "✅ Header path exists"
-              echo "📋 Headers in framework:"
-              ls -la "$HEADER_PATH/"
-              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH"
-            else
-              echo "❌ Header path does not exist"
+              echo "✅ Header path exists ($(ls "$HEADER_PATH" 2>/dev/null | wc -l | tr -d ' ') headers)"
+              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS \$(SRCROOT)/$HEADER_PATH"
             fi
-            
             if [ -d "$HEADER_PATH_SIM" ]; then
-              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS $HEADER_PATH_SIM"
+              HEADER_SEARCH_PATHS="$HEADER_SEARCH_PATHS \$(SRCROOT)/$HEADER_PATH_SIM"
             fi
-            
-            OTHER_LDFLAGS="$OTHER_LDFLAGS -framework $FW_NAME"
-          done
-          
-          LIBRARY_SEARCH_PATHS="."
+
+            if [ -d "$SLICE_DEV" ]; then
+              FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_SEARCH_PATHS \"\$(SRCROOT)/$SLICE_DEV\""
+            fi
+            if [ -d "$SLICE_SIM" ]; then
+              FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_SEARCH_PATHS \"\$(SRCROOT)/$SLICE_SIM\""
+            fi
+
+            # xcframework 名字可能是 libXXX.framework(=Mach-O 是动态库, 需要 -framework libXXX),
+            # 也可能不包含 lib 前缀(按 xcframework 的 Info.plist 的 bundle name 链接)。
+            # 直接按 FW_NAME 加 -framework, 链接器会自动在 FRAMEWORK_SEARCH_PATHS 中定位。
+            FW_LINK_FLAGS="$FW_LINK_FLAGS -framework $FW_NAME"
+            EMBED_LIST="$EMBED_LIST
+$FW_NAME"
+          done <<< "$FRAMEWORKS_IN_DIR"
+
+          LIBRARY_SEARCH_PATHS="\$(SRCROOT)/Frameworks"
         fi
-        
-        echo "Header search paths: $HEADER_SEARCH_PATHS"
-        echo "Library search paths: $LIBRARY_SEARCH_PATHS"
-        echo "Other LDFlags: $OTHER_LDFLAGS"
-        
-        if [ -n "$HEADER_SEARCH_PATHS" ] && [ -n "$OTHER_LDFLAGS" ]; then
-          echo "📝 Creating xcconfig file..."
-          echo 'HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework/Headers $(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator/libarkui_ios.framework/Headers' > ArkUIPlayer/ArkUIOverrides.xcconfig
-          # FRAMEWORK_SEARCH_PATHS 指向 xcframework 的真机/模拟器切片目录,这样 -framework libarkui_ios 才能被链接器正确解析到二进制。
-          echo 'FRAMEWORK_SEARCH_PATHS = $(inherited) "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64" "$(SRCROOT)/Frameworks/libarkui_ios.xcframework/ios-arm64_x86_64-simulator"' >> ArkUIPlayer/ArkUIOverrides.xcconfig
-          echo 'LIBRARY_SEARCH_PATHS = $(inherited) $(SRCROOT)/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
-          echo 'LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks' >> ArkUIPlayer/ArkUIOverrides.xcconfig
-          # ArkUI-X 依赖的系统 framework:Metal 渲染、CoreGraphics 绘制、Foundation 运行时、
-          # UIKit 视图/事件、QuartzCore 动画、CoreText/ImageIO 资源、CFNetwork/Combine等。
-          echo 'OTHER_LDFLAGS = $(inherited) -ObjC -lc++ -framework libarkui_ios -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework Metal -framework MetalKit -framework CoreText -framework ImageIO -framework CFNetwork -framework AVFoundation -framework WebKit -framework Combine -framework UserNotifications' >> ArkUIPlayer/ArkUIOverrides.xcconfig
-          echo 'WARNING_CFLAGS = -Wno-nullability-completeness' >> ArkUIPlayer/ArkUIOverrides.xcconfig
+
+        echo "Header search paths count: $(echo "$HEADER_SEARCH_PATHS" | wc -w)"
+        echo "Framework search paths count: $(echo "$FRAMEWORK_SEARCH_PATHS" | grep -o 'FRAMEWORK_DIR' -c || true) (see below)"
+        echo "Link flags: $FW_LINK_FLAGS"
+        echo "Embed list: $EMBED_LIST"
+
+        if [ -n "$FW_LINK_FLAGS" ]; then
+          echo "📝 Creating ArkUIOverrides.xcconfig (full SDK)"
+          {
+            # 1) Headers: 所有 xcframework 的 Headers 目录
+            echo "HEADER_SEARCH_PATHS = \$(inherited)$HEADER_SEARCH_PATHS"
+            # 2) Framework 搜索路径: 每个 xcframework 的 ios-arm64 / simulator 切片目录
+            echo "FRAMEWORK_SEARCH_PATHS = \$(inherited)$FRAMEWORK_SEARCH_PATHS"
+            echo "LIBRARY_SEARCH_PATHS = \$(inherited) $LIBRARY_SEARCH_PATHS"
+            echo "LD_RUNPATH_SEARCH_PATHS = \$(inherited) @executable_path/Frameworks"
+            # 3) 链接参数: -ObjC 保证 Category 加载, -lc++ 保证 STL,
+            #    然后所有 ArkUI-X 插件 xcframework 依次链接, 最后是系统 frameworks。
+            #    ArkUI-X 依赖的系统 framework: Metal 渲染、CoreGraphics 绘制、Foundation 运行时、
+            #    UIKit 视图/事件、QuartzCore 动画、CoreText/ImageIO 资源、CFNetwork/Combine 等。
+            echo "OTHER_LDFLAGS = \$(inherited) -ObjC -lc++$FW_LINK_FLAGS -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework Metal -framework MetalKit -framework CoreText -framework ImageIO -framework CFNetwork -framework AVFoundation -framework WebKit -framework Combine -framework UserNotifications"
+            echo "WARNING_CFLAGS = -Wno-nullability-completeness"
+            # 4) 允许 bitcode=NO (高版本 ArkUI-X SDK 默认关闭 bitcode)
+            echo "ENABLE_BITCODE = NO"
+            echo "SKIP_INSTALL = NO"
+            echo "COPY_PHASE_STRIP = NO"
+          } > ArkUIPlayer/ArkUIOverrides.xcconfig
           echo "✅ Created ArkUIOverrides.xcconfig"
           cat ArkUIPlayer/ArkUIOverrides.xcconfig
 
@@ -300,30 +357,32 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             IPHONEOS_DEPLOYMENT_TARGET=13.0 \
-            WARNING_CFLAGS="-Wno-nullability-completeness" 2>&1 | tee build.log || { echo "❌ Build failed"; echo "📋 Last 100 lines of build log:"; tail -100 build.log; exit 1; }
+            WARNING_CFLAGS="-Wno-nullability-completeness" 2>&1 | tee build.log || { echo "❌ Build failed"; echo "📋 Last 120 lines of build log:"; tail -120 build.log; exit 1; }
           echo "✅ Build completed successfully"
 
-          # 把 ArkUI XCFramework 的真机切片 framework 拷贝嵌入到 app 的 Frameworks 目录里,
-          # 否则运行时 dyld 会因 @rpath/libarkui_ios.framework/libarkui_ios 不存在而崩溃。
+          # 把 ALL ArkUI XCFramework 的真机切片 framework 拷贝嵌入到 app 的 Frameworks 目录里,
+          # 否则运行时 dyld 会因 @rpath/libhilog.framework/libhilog 之类的依赖找不到而崩溃。
           APP_PATH=$(find build -name "*.app" -type d | head -1)
           if [ -n "$APP_PATH" ]; then
-            echo "📦 Embedding ArkUI framework into app bundle..."
+            echo "📦 Embedding ALL ArkUI XCFrameworks' device slices into app bundle..."
             mkdir -p "$APP_PATH/Frameworks"
-            if [ -d "Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework" ]; then
-              cp -R "Frameworks/libarkui_ios.xcframework/ios-arm64/libarkui_ios.framework" "$APP_PATH/Frameworks/"
-              # xcframework 拷贝后要清理模拟器符号和切片,否则 App Store / adhoc 分发会拒绝;unsigned 包也清理以节省空间。
-              BIN="$APP_PATH/Frameworks/libarkui_ios.framework/libarkui_ios"
-              if [ -f "$BIN" ] && command -v lipo >/dev/null 2>&1; then
-                ARCHES=$(lipo -info "$BIN" 2>/dev/null | tail -1 || true)
-                echo "  Framework binary arches before: $ARCHES"
+            EMBEDDED_COUNT=0
+            while IFS= read -r FW_NAME; do
+              [ -z "$FW_NAME" ] && continue
+              SRC_FW="$FRAMEWORK_DIR/$FW_NAME.xcframework/ios-arm64/$FW_NAME.framework"
+              if [ -d "$SRC_FW" ]; then
+                cp -R "$SRC_FW" "$APP_PATH/Frameworks/"
+                BIN="$APP_PATH/Frameworks/$FW_NAME.framework/$FW_NAME"
+                # 去除签名(因为是 unsigned 包, framework 的签名与 app 不一致会导致安装失败)
+                if [ -f "$BIN" ] && command -v codesign >/dev/null 2>&1; then
+                  codesign --remove-signature "$BIN" 2>/dev/null || true
+                fi
+                EMBEDDED_COUNT=$((EMBEDDED_COUNT+1))
+                echo "  + embedded $FW_NAME.framework ($(du -sh "$BIN" 2>/dev/null | cut -f1))"
               fi
-              # 去除签名(因为是 unsigned 包,framework 的签名与 app 不一致会导致安装失败)。
-              if [ -f "$BIN" ] && command -v codesign >/dev/null 2>&1; then
-                codesign --remove-signature "$BIN" 2>/dev/null || true
-              fi
-              echo "✅ Embedded libarkui_ios.framework into $APP_PATH/Frameworks/"
-              ls -la "$APP_PATH/Frameworks/"
-            fi
+            done <<< "$EMBED_LIST"
+            echo "✅ Embedded $EMBEDDED_COUNT frameworks into $APP_PATH/Frameworks/"
+            ls -la "$APP_PATH/Frameworks/"
           fi
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \

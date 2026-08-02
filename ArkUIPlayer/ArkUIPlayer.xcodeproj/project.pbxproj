@@ -13,6 +13,7 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* LogFloatingButton.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,8 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* LogFloatingButton.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LogFloatingButton.h; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LogFloatingButton.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +56,8 @@
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* LogFloatingButton.h */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */,
 			);
@@ -129,6 +134,7 @@
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* LogFloatingButton.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
