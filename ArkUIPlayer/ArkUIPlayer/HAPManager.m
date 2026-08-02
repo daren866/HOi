@@ -1,4 +1,5 @@
 #import "HAPManager.h"
+#import "HAPPlayerViewController.h"
 
 #if HAS_ARKUI_X
 // 仅 StageApplication.h 是 ArkUI-X framework 公开导出的头文件,
@@ -760,10 +761,12 @@ static HAPManager *_sharedInstance = nil;
 
 #pragma mark - Foreground / Background
 
-// 检查当前导航栈顶部的 VC 是否是 StageViewController(或其子类)。
+// 检查当前导航栈顶部的 VC 是否是 HAPPlayerViewController(StageViewController 子类)。
 // StageApplication callCurrentAbilityOnForeground/Background 内部会取 topVC 并调用 instanceName,
 // 如果 topVC 不是 StageViewController(比如列表页 HAPViewController),会触发
 // unrecognized selector instanceName 崩溃。这里提前拦截。
+// 注意:不能用 respondsToSelector:@selector(instanceName) 判断,因为 HAPViewController
+// 也实现了 instanceName(返回 nil)来防止 ArkUI-X 内部异步调用的崩溃,所以改用 isKindOfClass。
 - (BOOL)_isStageViewControllerOnTop {
     UIWindow *keyWindow = nil;
     for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
@@ -780,8 +783,7 @@ static HAPManager *_sharedInstance = nil;
     if ([topVC isKindOfClass:[UINavigationController class]]) {
         topVC = ((UINavigationController *)topVC).topViewController;
     }
-    // 用 respondsToSelector 判断,不需要 import StageViewController.h
-    return [topVC respondsToSelector:@selector(instanceName)];
+    return [topVC isKindOfClass:[HAPPlayerViewController class]];
 }
 
 - (void)callCurrentAbilityOnForeground {
