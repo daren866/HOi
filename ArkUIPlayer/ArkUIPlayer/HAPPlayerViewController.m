@@ -2,6 +2,13 @@
 
 @interface HAPPlayerViewController ()
 
+// 标记 viewDidLoad 是否已经成功执行过(防止生命周期内多次重复 try)。
+@property (nonatomic, assign) BOOL didLoadViewSucceed;
+// 一旦有错误,后续生命周期不再转发给 super,避免递归崩溃。
+@property (nonatomic, assign) BOOL errorOccurred;
+// 已展示过的错误消息字符串(供日志/调试用,真正的 UI 由 HAPManager.crashErrorWindow 负责)。
+@property (nonatomic, copy) NSString *lastErrorMessage;
+
 @end
 
 @implementation HAPPlayerViewController
@@ -9,24 +16,48 @@
 - (instancetype)initWithHAPManager:(HAPManager *)manager
                         bundleName:(NSString *)bundleName
                         moduleName:(NSString *)moduleName
-                       abilityName:(NSString *)abilityName {
+                       abilityName:(NSString *)abilityName
+                          appName:(NSString *)appName
+                         pageName:(NSString *)pageName {
     // instanceName 格式为 "bundleName:moduleName:abilityName",
     // StageViewController 内部据此定位 hap 解压后 {moduleName}/ 目录里的 abc 字节码与渲染入口。
     NSString *safeBundleName = bundleName.length ? bundleName : @"com.example.hap";
     NSString *safeModuleName = moduleName.length ? moduleName : @"entry";
     NSString *safeAbilityName = abilityName.length ? abilityName : @"EntryAbility";
 
+    // 先清理上一次崩溃可能残留的错误 UI(用户重新点另一个 hap 的时候)。
+    if (manager) {
+        [manager hideGlobalError];
+    }
+
+    @try {
 #if HAS_ARKUI_X
-    NSString *instanceName = [NSString stringWithFormat:@"%@:%@:%@", safeBundleName, safeModuleName, safeAbilityName];
-    self = [super initWithInstanceName:instanceName];
+        NSString *instanceName = [NSString stringWithFormat:@"%@:%@:%@", safeBundleName, safeModuleName, safeAbilityName];
+        self = [super initWithInstanceName:instanceName];
 #else
-    self = [super init];
+        self = [super init];
 #endif
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ initWithInstanceName crashed: %@\n%@", e, e.callStackSymbols);
+        self = [super init];
+        if (self) {
+            self.errorOccurred = YES;
+            NSString *msg = [NSString stringWithFormat:@"initWithInstanceName: %@\n%@",
+                             e.reason ?: e.name ?: @"unknown",
+                             [e.callStackSymbols componentsJoinedByString:@"\n"]];
+            self.lastErrorMessage = msg;
+            [manager showGlobalError:msg shortText:@"报错"];
+        }
+        return self;
+    }
+
     if (self) {
         self.hapManager = manager;
         self.bundleName = safeBundleName;
         self.moduleName = safeModuleName;
         self.abilityName = safeAbilityName;
+        self.appName = appName.length ? appName : safeModuleName;
+        self.pageName = pageName ?: @"";
         // 注意:不要再在这里调用 hapManager.initializeArkUI。
         // ArkUI 运行时已经在 loadHAPAtPath 的 completion 触发前启动完毕(由 HAPManager 内部
         // 调用 StageApplication launchApplication 完成),此时 VC 才被创建。
@@ -35,26 +66,142 @@
 }
 
 - (void)viewDidLoad {
-    [super viewDidLoad];
+    if (self.errorOccurred) {
+        // initWithInstanceName 已经失败,super 是 UIViewController,可以安全调 viewDidLoad
+        [super viewDidLoad];
+        return;
+    }
 
-    self.title = @"ArkUI Player";
+    // StageViewController.viewDidLoad 会创建 Surface、调用 AppMain::DispatchOnCreate/DispatchOnForeground,
+    // 这两个 C++ 调用如果 abc 字节码缺失/损坏,或 instanceName 不匹配 hap 实际入口,
+    // 会抛出 ObjC 异常或直接 abort。这里用 @try/@catch 拦截 ObjC 异常,
+    // C++ abort 由 HAPManager 的全局信号处理器(sigaction SIGABRT)拦截,一样弹出独立 Window 报错。
+    @try {
+        [super viewDidLoad];
+        self.didLoadViewSucceed = YES;
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ viewDidLoad crashed: %@\n%@", e, e.callStackSymbols);
+        self.didLoadViewSucceed = NO;
+        self.errorOccurred = YES;
+        NSString *msg = [NSString stringWithFormat:@"viewDidLoad: %@\n\nCallstack:\n%@",
+                         e.reason ?: e.name ?: @"unknown",
+                         [e.callStackSymbols componentsJoinedByString:@"\n"]];
+        self.lastErrorMessage = msg;
+        [self showErrorMessage:msg];
+        return;
+    }
+
+    self.title = self.appName.length ? self.appName : @"ArkUI Player";
     self.view.backgroundColor = [UIColor whiteColor];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    // 页面真正展示出来且没有报错,说明 hap 渲染成功,把上一次崩溃可能残留的错误 Window 清掉。
+    if (!self.errorOccurred && self.didLoadViewSucceed) {
+        [self.hapManager hideGlobalError];
+    }
+
+    if (self.errorOccurred) {
+        [super viewDidAppear:animated];
+        return;
+    }
+    @try {
+        [super viewDidAppear:animated];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ viewDidAppear crashed: %@\n%@", e, e.callStackSymbols);
+        self.errorOccurred = YES;
+        NSString *msg = [NSString stringWithFormat:@"viewDidAppear: %@\n%@",
+                         e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+        self.lastErrorMessage = msg;
+        [self showErrorMessage:msg];
+    }
+}
+
 - (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
+    // 已经处于错误展示状态时,不再转发任何生命周期给 StageVC,避免二次触发同一异常。
+    if (self.errorOccurred) {
+        [super viewWillAppear:animated];
+        return;
+    }
+
+    @try {
+        [super viewWillAppear:animated];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ viewWillAppear crashed: %@\n%@", e, e.callStackSymbols);
+        self.errorOccurred = YES;
+        NSString *msg = [NSString stringWithFormat:@"viewWillAppear: %@\n%@",
+                         e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+        self.lastErrorMessage = msg;
+        [self showErrorMessage:msg];
+        return;
+    }
+
     // ArkUI 未启动时不要转发 foreground,否则 StageApplication 取到的 topViewController
     // 不是 StageViewController,会触发空指针/状态机错乱崩溃。
     if (self.hapManager.isArkUIRunning) {
-        [self.hapManager callCurrentAbilityOnForeground];
+        @try {
+            [self.hapManager callCurrentAbilityOnForeground];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPPlayer] ❌ callCurrentAbilityOnForeground crashed: %@\n%@", e, e.callStackSymbols);
+            self.errorOccurred = YES;
+            NSString *msg = [NSString stringWithFormat:@"onForeground: %@\n%@",
+                             e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+            self.lastErrorMessage = msg;
+            [self showErrorMessage:msg];
+        }
     }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    if (self.hapManager.isArkUIRunning) {
-        [self.hapManager callCurrentAbilityOnBackground];
+    if (!self.didLoadViewSucceed) {
+        [super viewWillDisappear:animated];
+        return;
     }
+    if (self.errorOccurred) {
+        [super viewWillDisappear:animated];
+        return;
+    }
+
+    @try {
+        [super viewWillDisappear:animated];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ viewWillDisappear crashed: %@", e);
+    }
+
+    if (self.hapManager.isArkUIRunning) {
+        @try {
+            [self.hapManager callCurrentAbilityOnBackground];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPPlayer] ❌ callCurrentAbilityOnBackground crashed: %@", e);
+        }
+    }
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    if (self.errorOccurred) {
+        [super viewDidDisappear:animated];
+        return;
+    }
+    @try {
+        [super viewDidDisappear:animated];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPPlayer] ❌ viewDidDisappear crashed: %@", e);
+    }
+}
+
+#pragma mark - Error UI(转发到 HAPManager 的全局独立 Window)
+
+// 错误 UI 统一交给 HAPManager 用独立 UIWindow(windowLevel = UIWindowLevelAlert + 1000) 渲染,
+// 保证 StageVC 的渲染层(windowView / Metal layer)不会把红色报错文本覆盖;
+// 也保证即使 StageVC 的 view 没加载成功(例如 initWithInstanceName 就 abort 了),也能显示报错。
+- (void)showErrorMessage:(NSString *)message {
+    if (!message || message.length == 0) {
+        message = @"Unknown error";
+    }
+    self.lastErrorMessage = message;
+    self.errorOccurred = YES;
+    NSLog(@"[HAPPlayer] Show error message (via global window): %@", message);
+    [self.hapManager showGlobalError:message shortText:@"报错"];
 }
 
 @end
