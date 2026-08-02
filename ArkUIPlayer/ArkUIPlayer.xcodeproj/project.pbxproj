@@ -272,7 +272,7 @@
 					"$(SRCROOT)/../third_party",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/..";
-				OTHER_LDFLAGS = "$(inherited)";
+				OTHER_LDFLAGS = "$(inherited) -lz";
 			};
 			name = Debug;
 		};
@@ -299,7 +299,7 @@
 					"$(SRCROOT)/../third_party",
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/..";
-				OTHER_LDFLAGS = "$(inherited)";
+				OTHER_LDFLAGS = "$(inherited) -lz";
 			};
 			name = Release;
 		};
