@@ -274,7 +274,6 @@ jobs:
         FRAMEWORK_SEARCH_PATHS=""
         LIBRARY_SEARCH_PATHS=""
         FW_LINK_FLAGS=""
-        EMBED_LIST=""
 
         if [ -n "$FRAMEWORKS_IN_DIR" ]; then
           echo "Found frameworks in Frameworks:"
@@ -368,22 +367,41 @@ jobs:
             echo "📦 Embedding ALL ArkUI XCFrameworks' device slices into app bundle..."
             mkdir -p "$APP_PATH/Frameworks"
             EMBEDDED_COUNT=0
-            while IFS= read -r FW_NAME; do
-              [ -z "$FW_NAME" ] && continue
-              SRC_FW="$FRAMEWORK_DIR/$FW_NAME.xcframework/ios-arm64/$FW_NAME.framework"
+            for xcfw in "$FRAMEWORK_DIR"/*.xcframework; do
+              [ -d "$xcfw" ] || continue
+              FW_NAME=$(basename "$xcfw" .xcframework)
+              SRC_FW="$xcfw/ios-arm64/$FW_NAME.framework"
               if [ -d "$SRC_FW" ]; then
                 cp -R "$SRC_FW" "$APP_PATH/Frameworks/"
                 BIN="$APP_PATH/Frameworks/$FW_NAME.framework/$FW_NAME"
-                # 去除签名(因为是 unsigned 包, framework 的签名与 app 不一致会导致安装失败)
                 if [ -f "$BIN" ] && command -v codesign >/dev/null 2>&1; then
                   codesign --remove-signature "$BIN" 2>/dev/null || true
                 fi
                 EMBEDDED_COUNT=$((EMBEDDED_COUNT+1))
                 echo "  + embedded $FW_NAME.framework ($(du -sh "$BIN" 2>/dev/null | cut -f1))"
+              else
+                echo "  ⚠️ no ios-arm64 slice for $FW_NAME, skipping"
               fi
-            done <<< "$EMBED_LIST"
+            done
             echo "✅ Embedded $EMBEDDED_COUNT frameworks into $APP_PATH/Frameworks/"
-            ls -la "$APP_PATH/Frameworks/"
+            ls -la "$APP_PATH/Frameworks/" | head -20
+            echo "  ... (total $(ls "$APP_PATH/Frameworks/" | wc -l | tr -d ' ') items)"
+            echo "  Frameworks dir size: $(du -sh "$APP_PATH/Frameworks/" | cut -f1)"
+
+            # 把 SDK 的 engine/systemres/ 拷贝到 app bundle,
+            # 运行时 HAPManager 会把它复制到 Documents/files/arkui-x/systemres/。
+            # systemres 包含: 系统 abc 字节码、字体、ICU 数据(icudt74l.dat 31MB)、resources.index。
+            # 缺这些运行时 LogWrapper::PrintLog 会因 ICU 未初始化而 SIGSEGV (addr=0xa)。
+            SYSTEMRES_SRC=$(find "$GITHUB_WORKSPACE/arkui-x-sdk" -type d -name "systemres" -path "*/engine/*" 2>/dev/null | head -1)
+            if [ -n "$SYSTEMRES_SRC" ] && [ -d "$SYSTEMRES_SRC" ]; then
+              echo "📦 Copying systemres from $SYSTEMRES_SRC to app bundle..."
+              cp -R "$SYSTEMRES_SRC" "$APP_PATH/"
+              echo "  systemres size: $(du -sh "$APP_PATH/systemres/" | cut -f1)"
+              ls "$APP_PATH/systemres/"
+            else
+              echo "⚠️ systemres not found in SDK! Runtime will crash without ICU data."
+              find "$GITHUB_WORKSPACE/arkui-x-sdk" -name "systemres" -type d 2>/dev/null || true
+            fi
           fi
         else
           xcodebuild -project ArkUIPlayer.xcodeproj \
