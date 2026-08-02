@@ -81,33 +81,38 @@ jobs:
         # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
         # arm64: 541MB  x64: 515MB
         # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
-        SDK_URL_ARM64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
-        SDK_URL_X64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+        SDK_URL_ARM64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_ARM64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_X64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+        SDK_URL_X64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
 
         # 回退: 旧版 1.0.0.0 (API 10, bytecode 9.x) — 仅在前者全失败时使用
         SDK_URL_FALLBACK_ARM64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-arm64-1.0.0.0-Release.zip"
         SDK_URL_FALLBACK_X64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-x64-1.0.0.0-Release.zip"
 
-        # 按架构优先排列, 再回退到另一架构, 最后旧版
+        # 按架构优先排列: 先 drcn(中国区) → global(全球) → 另一架构 → 旧版回退
         if [ "$HOST_ARCH" = "arm64" ]; then
-          SDK_URLS=("$SDK_URL_ARM64" "$SDK_URL_X64" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
+          SDK_URLS=("$SDK_URL_ARM64_DRCN" "$SDK_URL_ARM64_GLOBAL" "$SDK_URL_X64_DRCN" "$SDK_URL_X64_GLOBAL" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
         else
-          SDK_URLS=("$SDK_URL_X64" "$SDK_URL_ARM64" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
+          SDK_URLS=("$SDK_URL_X64_DRCN" "$SDK_URL_X64_GLOBAL" "$SDK_URL_ARM64_DRCN" "$SDK_URL_ARM64_GLOBAL" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
         fi
 
         DOWNLOAD_SUCCESS=0
         TRIED_URLS=""
 
         for url in "${SDK_URLS[@]}"; do
-          TRIED_URLS="$TRIED_URLS
-  - $url"
+          TRIED_URLS="$TRIED_URLS - $url"
           echo "━━━ Trying: $url ━━━"
-          HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
+          # 用 -L 跟随 302 重定向, 华为 CDN 会重定向到就近节点
+          HTTP_CODE=$(curl -sIL "$url" -o /dev/null -w '%{http_code}' --max-time 15)
           echo "HTTP status: $HTTP_CODE"
-          [ "$HTTP_CODE" != "200" ] && { echo "⚠️ Not available, skipping"; continue; }
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ Not available (HTTP $HTTP_CODE), skipping"
+            continue
+          fi
 
           echo "Starting download..."
-          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 600 --retry 2 --retry-delay 5; then
+          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 1200 --retry 2 --retry-delay 5; then
             file_size=$(wc -c < arkui-x-sdk.zip)
             echo "Downloaded: $file_size bytes ($(($file_size/1024/1024))MB)"
 
@@ -310,17 +315,13 @@ jobs:
             # 也可能不包含 lib 前缀(按 xcframework 的 Info.plist 的 bundle name 链接)。
             # 直接按 FW_NAME 加 -framework, 链接器会自动在 FRAMEWORK_SEARCH_PATHS 中定位。
             FW_LINK_FLAGS="$FW_LINK_FLAGS -framework $FW_NAME"
-            EMBED_LIST="$EMBED_LIST
-$FW_NAME"
           done <<< "$FRAMEWORKS_IN_DIR"
 
           LIBRARY_SEARCH_PATHS="\$(SRCROOT)/Frameworks"
         fi
 
         echo "Header search paths count: $(echo "$HEADER_SEARCH_PATHS" | wc -w)"
-        echo "Framework search paths count: $(echo "$FRAMEWORK_SEARCH_PATHS" | grep -o 'FRAMEWORK_DIR' -c || true) (see below)"
         echo "Link flags: $FW_LINK_FLAGS"
-        echo "Embed list: $EMBED_LIST"
 
         if [ -n "$FW_LINK_FLAGS" ]; then
           echo "📝 Creating ArkUIOverrides.xcconfig (full SDK)"
