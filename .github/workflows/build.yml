@@ -67,32 +67,33 @@ jobs:
           echo "⚠️ ACE Tools installation failed"
         fi
 
-    - name: Download ArkUI-X SDK from official Huawei mirror
+    - name: Download ArkUI-X SDK 6.1.1.100 (API 24, bytecode 12.x)
       run: |
-        echo "🔍 Downloading ArkUI-X SDK from official Huawei mirror..."
-        echo "目标 bytecode 支持: 用户 hap 使用 Restool 6.1 生成 bytecode 12.0.6.0 (API 12+), 优"
-        echo "先尝试高版本 SDK, 回退链: 自定义 ARKUI_X_SDK_URL → 1.0.0.0 Release (API 10) → 0.0.9.6 Canary"
+        echo "🔍 Downloading ArkUI-X SDK 6.1.1.100 (API 24, Release) from official Huawei CDN..."
+        echo "目标: 支持 bytecode 12.0.6.0 (DevEco Studio 6.1.1.300 配套 SDK)"
+        echo "直链来源: repo.harmonyos.com/sdkmanager/crossPlatform/getSdkList GRS 服务返回"
+        echo ""
 
-        SDK_URLS=()
-        # 优先级 1: 通过 GitHub Actions Secrets 注入的自定义 SDK URL(支持用户把 DevEco Studio 下载的
-        # API 12+/5.0.x ArkUI-X SDK 放到自己的对象存储/Release 里, 支持 bytecode 12.x).
-        if [ -n "${ARKUI_X_SDK_URL_ARM64}" ]; then
-          SDK_URLS+=("${ARKUI_X_SDK_URL_ARM64}")
+        # 检测 CI runner 架构, 优先下载匹配的 SDK
+        HOST_ARCH=$(uname -m)
+        echo "Host architecture: $HOST_ARCH"
+
+        # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
+        # arm64: 541MB  x64: 515MB
+        # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
+        SDK_URL_ARM64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_X64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+
+        # 回退: 旧版 1.0.0.0 (API 10, bytecode 9.x) — 仅在前者全失败时使用
+        SDK_URL_FALLBACK_ARM64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-arm64-1.0.0.0-Release.zip"
+        SDK_URL_FALLBACK_X64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-x64-1.0.0.0-Release.zip"
+
+        # 按架构优先排列, 再回退到另一架构, 最后旧版
+        if [ "$HOST_ARCH" = "arm64" ]; then
+          SDK_URLS=("$SDK_URL_ARM64" "$SDK_URL_X64" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
+        else
+          SDK_URLS=("$SDK_URL_X64" "$SDK_URL_ARM64" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
         fi
-        if [ -n "${ARKUI_X_SDK_URL_X64}" ]; then
-          SDK_URLS+=("${ARKUI_X_SDK_URL_X64}")
-        fi
-        if [ -n "${ARKUI_X_SDK_URL}" ]; then
-          SDK_URLS+=("${ARKUI_X_SDK_URL}")
-        fi
-        # 优先级 2: 华为镜像上最新的版本 (1.0.0.0 Release, API 10) —— bytecode max 通常是 9.x,
-        # 但框架接口比 0.0.9.6 稳定, 且包含 libhilog/libresourcemanager 等完整 xcframework.
-        SDK_URLS+=(
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-arm64-1.0.0.0-Release.zip"
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-x64-1.0.0.0-Release.zip"
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/0.0.9.6/darwin/arkui-x-darwin-x64-0.0.9.6-Canary1.zip"
-          "https://repo.huaweicloud.com/arkui-crossplatform/sdk/0.0.9.6/darwin/arkui-x-darwin-arm64-0.0.9.6-Canary1.zip"
-        )
 
         DOWNLOAD_SUCCESS=0
         TRIED_URLS=""
@@ -100,79 +101,53 @@ jobs:
         for url in "${SDK_URLS[@]}"; do
           TRIED_URLS="$TRIED_URLS
   - $url"
-          echo "Trying: $url"
-          echo "Checking URL availability..."
-          curl -sI "$url" | head -3
+          echo "━━━ Trying: $url ━━━"
+          HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
+          echo "HTTP status: $HTTP_CODE"
+          [ "$HTTP_CODE" != "200" ] && { echo "⚠️ Not available, skipping"; continue; }
 
-          echo "Starting download with wget (supports resume)... "
-          if wget -c "$url" -O arkui-x-sdk.zip --timeout=60 --tries=3 --waitretry=5; then
+          echo "Starting download..."
+          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 600 --retry 2 --retry-delay 5; then
             file_size=$(wc -c < arkui-x-sdk.zip)
-            echo "File size: $file_size bytes"
+            echo "Downloaded: $file_size bytes ($(($file_size/1024/1024))MB)"
 
-            if [ "$file_size" -gt 1000000 ]; then
-              echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
-              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
+            if [ "$file_size" -gt 50000000 ]; then
+              echo "✅ Valid SDK zip, unzipping..."
+              unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1 | tail -3
               rm arkui-x-sdk.zip
 
-              echo "📁 SDK root-level manifest:"
-              find arkui-x-sdk -maxdepth 2 -name "arkui-x.json" -o -name "sdkConfig.json" | while read m; do
+              echo ""
+              echo "📁 SDK manifest:"
+              find arkui-x-sdk -maxdepth 2 \( -name "arkui-x.json" -o -name "sdkConfig.json" \) | while read m; do
                 echo "--- $m ---"
                 cat "$m"
               done
-              echo "📁 SDK xcframework list:"
-              find arkui-x-sdk -name "*.xcframework" -type d | sort
 
-              echo "✅ SDK downloaded successfully"
-              DOWNLOAD_SUCCESS=1
-              break
+              echo ""
+              XCFW_COUNT=$(find arkui-x-sdk -name "*.xcframework" -type d | wc -l | tr -d ' ')
+              echo "📁 SDK contains $XCFW_COUNT XCFrameworks"
+
+              # 校验核心 framework 存在
+              if find arkui-x-sdk -name "libarkui_ios.xcframework" -type d | grep -q .; then
+                echo "✅ Core libarkui_ios.xcframework found"
+                DOWNLOAD_SUCCESS=1
+                break
+              else
+                echo "⚠️ libarkui_ios.xcframework not found in this SDK, trying next URL..."
+                rm -rf arkui-x-sdk
+              fi
             else
               echo "⚠️ File too small ($file_size bytes), skipping"
               rm arkui-x-sdk.zip
             fi
           else
-            echo "⚠️ wget download failed, trying curl..."
-
-            if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 900 --retry 2 --retry-delay 5 --continue-at -; then
-              file_size=$(wc -c < arkui-x-sdk.zip)
-              echo "File size: $file_size bytes"
-
-              if [ "$file_size" -gt 1000000 ]; then
-                echo "✅ Downloaded large file ($(($file_size/1024/1024))MB), unzipping..."
-                unzip -o arkui-x-sdk.zip -d arkui-x-sdk/ 2>&1
-                rm arkui-x-sdk.zip
-
-                echo "📁 SDK root-level manifest:"
-                find arkui-x-sdk -maxdepth 2 -name "arkui-x.json" -o -name "sdkConfig.json" | while read m; do
-                  echo "--- $m ---"
-                  cat "$m"
-                done
-                echo "📁 SDK xcframework list:"
-                find arkui-x-sdk -name "*.xcframework" -type d | sort
-
-                echo "✅ SDK downloaded successfully"
-                DOWNLOAD_SUCCESS=1
-                break
-              else
-                echo "⚠️ File too small ($file_size bytes), skipping"
-                rm arkui-x-sdk.zip
-              fi
-            else
-              echo "⚠️ Download failed: $url"
-            fi
+            echo "⚠️ Download failed: $url"
           fi
         done
 
         if [ "$DOWNLOAD_SUCCESS" -eq 0 ]; then
           echo "❌ Failed to download ArkUI-X SDK from all sources!"
           echo "Tried URLs: $TRIED_URLS"
-          echo ""
-          echo "💡 提示: 要支持 bytecode 12.0.6.0 (您当前 hap 的版本),请把 DevEco Studio 下载的"
-          echo "ArkUI-X SDK (5.0.x / API 12+ 对应版本, 包含 libarkui_ios.xcframework 12.x runtime)"
-          echo "打包为 zip 上传到 GitHub Release 或对象存储, 然后在仓库 Settings → Secrets"
-          echo "→ Actions 中新增 Repository Secret:"
-          echo "  - ARKUI_X_SDK_URL_ARM64=https://your-host/arkui-x-darwin-arm64-5.0.x-Release.zip"
-          echo "  - ARKUI_X_SDK_URL_X64=https://your-host/arkui-x-darwin-x64-5.0.x-Release.zip"
-          echo "下次 CI 运行会优先使用您注入的 SDK。"
           exit 1
         fi
 
