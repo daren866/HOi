@@ -225,6 +225,9 @@
     NSString *appName = hapInfo[@"appName"] ?: [hapPath.lastPathComponent stringByDeletingPathExtension];
     NSString *pageName = hapInfo[@"pageName"] ?: @"";
 
+    // 点击前先清理上一次崩溃可能残留的错误 UI
+    [self.hapManager hideGlobalError];
+
     [self.loadingIndicator startAnimating];
 
     [self.hapManager loadHAPAtPath:hapPath completion:^(BOOL success, NSString *errorMessage) {
@@ -234,35 +237,70 @@
             // push 前先 pop 回根 VC,确保旧的 StageViewController 被 dealloc,
             // 否则旧的 instanceName 仍会留在 AppMain 内部表中,下一个 hap 的 DispatchOnCreate
             // 可能找不到正确的入口或者对同一个 instanceName 重复 DispatchOnCreate 崩。
-            [self.navigationController popToRootViewControllerAnimated:NO];
+            @try {
+                [self.navigationController popToRootViewControllerAnimated:NO];
+            } @catch (NSException *e) {
+                NSLog(@"[HAPList] ❌ popToRoot crashed: %@", e);
+            }
 
             // loadHAP 完成后,abc 字节码已经被 ArkUI 运行时加载并启动,
             // 这里用从 module.json5/module.json 解析出的 bundleName/moduleName/abilityName
             // 创建播放 VC,StageViewController 会通过该 instanceName 触发 abc 渲染出的 ArkUI 页面挂载到屏幕上。
             // appName/pageName 也一并通过初始化方法传入,用于播放界面顶部展示当前应用名与入口界面。
-            HAPPlayerViewController *playerVC = [[HAPPlayerViewController alloc]
-                initWithHAPManager:self.hapManager
-                        bundleName:bundleName
-                        moduleName:moduleName
-                       abilityName:abilityName
-                          appName:appName
-                         pageName:pageName];
+            HAPPlayerViewController *playerVC;
+            @try {
+                playerVC = [[HAPPlayerViewController alloc]
+                    initWithHAPManager:self.hapManager
+                            bundleName:bundleName
+                            moduleName:moduleName
+                           abilityName:abilityName
+                              appName:appName
+                             pageName:pageName];
+            } @catch (NSException *e) {
+                NSLog(@"[HAPList] ❌ HAPPlayerViewController init crashed: %@\n%@", e, e.callStackSymbols);
+                NSString *msg = [NSString stringWithFormat:@"HAPPlayer init: %@\n%@",
+                                 e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+                [self.hapManager showGlobalError:msg shortText:@"报错"];
+                return;
+            }
 
-            // 用 animated:YES 推入,等转场完成后再主动触发一次 foreground,
-            // 因为 StageViewController.viewDidLoad 已经发过 DispatchOnForeground,
-            // 但此时 abc 字节码里的 ability 组件可能还没挂载好。
-            [CATransaction begin];
-            [CATransaction setCompletionBlock:^{
-                if (self.hapManager.isArkUIRunning) {
-                    [self.hapManager callCurrentAbilityOnForeground];
-                }
-            }];
-            [self.navigationController pushViewController:playerVC animated:YES];
-            [CATransaction commit];
+            // push 阶段也可能因为导航栏或 StageVC 内部触发 dispatch 而 abort,
+            // 用 @try/@catch 包一下,失败则走全局错误 UI。
+            @try {
+                // 用 animated:YES 推入,等转场完成后再主动触发一次 foreground,
+                // 因为 StageViewController.viewDidLoad 已经发过 DispatchOnForeground,
+                // 但此时 abc 字节码里的 ability 组件可能还没挂载好。
+                __weak typeof(self) weakSelf = self;
+                [CATransaction begin];
+                [CATransaction setCompletionBlock:^{
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    if (strongSelf.hapManager.isArkUIRunning) {
+                        @try {
+                            [strongSelf.hapManager callCurrentAbilityOnForeground];
+                        } @catch (NSException *e) {
+                            NSLog(@"[HAPList] ❌ post-push onForeground crashed: %@\n%@", e, e.callStackSymbols);
+                            NSString *msg = [NSString stringWithFormat:@"post-push onForeground: %@\n%@",
+                                             e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+                            [strongSelf.hapManager showGlobalError:msg shortText:@"报错"];
+                        }
+                    }
+                }];
+                [self.navigationController pushViewController:playerVC animated:YES];
+                [CATransaction commit];
+            } @catch (NSException *e) {
+                NSLog(@"[HAPList] ❌ pushViewController crashed: %@\n%@", e, e.callStackSymbols);
+                NSString *msg = [NSString stringWithFormat:@"push: %@\n%@",
+                                 e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+                [self.hapManager showGlobalError:msg shortText:@"报错"];
+            }
         } else {
             // 加载 hap 失败:此时 hap 没成功加载,不能 push HAPPlayerViewController,
             // 因为 StageViewController.viewDidLoad 会试图调用 AppMain::DispatchOnCreate 而 abc 未就绪,会闪退。
-            // 这里直接弹出 Alert,提供"复制错误"按钮把完整错误信息复制到剪贴板,便于用户反馈问题。
+            // 这里优先展示全局红色错误 UI(满足用户"居中红色文本,点击复制"的需求);
+            // 同时也提供一个 Alert 作备份,万一 Window 显示失败也能让用户看到错误。
+            [self.hapManager showGlobalError:errorMessage shortText:@"加载失败"];
+
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加载失败"
                                                                            message:errorMessage
                                                                     preferredStyle:UIAlertControllerStyleAlert];
@@ -271,7 +309,11 @@
                 pb.string = errorMessage ?: @"";
             }]];
             [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleCancel handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
+            @try {
+                [self presentViewController:alert animated:YES completion:nil];
+            } @catch (NSException *e) {
+                NSLog(@"[HAPList] ❌ present alert crashed: %@", e);
+            }
         }
     }];
 }

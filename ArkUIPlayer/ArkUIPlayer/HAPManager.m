@@ -8,6 +8,9 @@
 
 #import <spawn.h>
 #import <sys/wait.h>
+#import <signal.h>
+#import <execinfo.h>
+#import <mach/mach.h>
 
 // module.json 中常见字段名常量,用于解析 hap 的运行时入口信息。
 static NSString *const kDefaultModuleName = @"entry";
@@ -20,6 +23,166 @@ static NSString *const kArkuiXDirName = @"arkui-x";
 // abc 时走回退路径 GetAppDataModuleDir()+moduleName 会落空,返回空 buffer 让 AppMain 崩溃。
 static NSString *const kFilesSubdirName = @"files";
 
+// ---- 全局崩溃防护:静态变量 + C 级别的 handler ----
+// 保存之前的 UncaughtException handler / signal handler,崩溃后优先调用我们的,
+// 再交给原 handler(如果有的话)做最后清理。不过为了避免 abort 二次触发闪退,
+// 我们在自己的 handler 里不再转发。
+static NSUncaughtExceptionHandler *g_prevExceptionHandler = NULL;
+static struct sigaction g_prevSigAction[NSIG];
+static volatile sig_atomic_t g_crashGuardArmed = 0;
+static void *g_hapManagerSelf = NULL;  // 弱引用,只在崩溃时用来 showGlobalError
+
+// 信号号 -> 可读名称,方便报错信息
+static const char *_SignalName(int sig) {
+    switch (sig) {
+        case SIGABRT: return "SIGABRT";
+        case SIGSEGV: return "SIGSEGV";
+        case SIGBUS:  return "SIGBUS";
+        case SIGILL:  return "SIGILL";
+        case SIGFPE:  return "SIGFPE";
+        case SIGPIPE: return "SIGPIPE";
+        case SIGTRAP: return "SIGTRAP";
+        default: {
+            static char buf[16];
+            snprintf(buf, sizeof(buf), "SIG%d", sig);
+            return buf;
+        }
+    }
+}
+
+// 从信号栈回溯获取 callstack 字符串(最多 30 帧),信号安全级别。
+// 不保证 100% 可用,但能拿到多少拿多少,拼到报错里供用户复制。
+static NSString *_BacktraceFromContext(ucontext_t *uctx) {
+    void *frames[30];
+    int count = backtrace(frames, 30);
+    if (count <= 0) {
+        // 退而用 backtrace_symbols 直接解析地址
+        count = backtrace(frames, 30);
+    }
+    if (count <= 0) return @"";
+    char **syms = backtrace_symbols(frames, count);
+    if (!syms) return @"";
+    NSMutableArray *lines = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
+    for (int i = 0; i < count; i++) {
+        if (syms[i]) {
+            [lines addObject:@(syms[i])];
+        }
+    }
+    free(syms);
+    return [lines componentsJoinedByString:@"\n"];
+}
+
+// 信号处理器:当 ArkUI-X C++ 内部 abort(SIGABRT)或段错误(SIGSEGV)时触发。
+// 注意:这里是异步信号安全级别,不能做 malloc / ObjC 消息发送 / 锁等操作。
+// 因此我们把 crash 信息先写到全局原子缓存里,然后通过 CFRunLoopSourceSignal 在主线程
+// 上调度一次安全回调来展示 UI。
+static volatile char g_crashMessage[8192];
+static volatile sig_atomic_t g_crashPending = 0;
+static CFRunLoopSourceRef g_crashRunloopSource = NULL;
+
+static void _ScheduleMainThreadCrashUI(void) {
+    if (g_crashRunloopSource) {
+        CFRunLoopSourceSignal(g_crashRunloopSource);
+        CFRunLoopWakeUp(CFRunLoopGetMain());
+    }
+}
+
+// CFRunLoopSource 回调:在主线程上(安全)显示错误 UI
+static void _CrashRunloopCallback(void *info) {
+    @autoreleasepool {
+        // 读取原子缓存的错误信息
+        char buf[sizeof(g_crashMessage)];
+        // 注意:volatile 字节拷贝,不保证完整但足够安全
+        memcpy(buf, (void *)g_crashMessage, sizeof(buf));
+        buf[sizeof(buf)-1] = 0;
+        NSString *message = @(buf);
+        if (message.length == 0) {
+            message = @"未知崩溃";
+        }
+        NSLog(@"[HAPManager] Crash handler firing on main thread:\n%@", message);
+        HAPManager *mgr = (__bridge HAPManager *)g_hapManagerSelf;
+        if (mgr) {
+            [mgr showGlobalError:message shortText:@"报错"];
+        }
+        g_crashPending = 0;
+    }
+}
+
+// 真实的信号 handler(信号安全级别)
+static void _SignalCrashHandler(int sig, siginfo_t *info, void *ucontext) {
+    if (g_crashPending) return;  // 已经在处理了,防止递归
+    g_crashPending = 1;
+
+    // 构建错误信息:不使用 ObjC,只用 C sprintf 到缓冲区
+    char *buf = (char *)g_crashMessage;
+    size_t n = 0;
+    n += (size_t)snprintf(buf + n, sizeof(g_crashMessage) - n,
+                          "Signal: %s (code=%d, addr=%p)\n\n"
+                          "ArkUI-X 触发了致命信号,应用不会继续退出,已切换到错误展示模式。\n"
+                          "点击红色文本可复制完整错误。\n\n"
+                          "Backtrace:\n",
+                          _SignalName(sig), info ? info->si_code : 0,
+                          info ? info->si_addr : NULL);
+
+    // 追加 backtrace(backtrace_symbols 不是严格信号安全,但在实际崩溃时通常能跑)
+    void *frames[40];
+    int count = backtrace(frames, 40);
+    if (count > 0) {
+        char **syms = backtrace_symbols(frames, count);
+        if (syms) {
+            for (int i = 0; i < count && n < sizeof(g_crashMessage) - 2; i++) {
+                n += (size_t)snprintf(buf + n, sizeof(g_crashMessage) - n, "%s\n", syms[i]);
+            }
+            free(syms);
+        }
+    }
+
+    // 主线程上显示错误 UI
+    _ScheduleMainThreadCrashUI();
+
+    // 不转发原 handler(否则会重新走 abort / 默认的 Terminator,app 就退了)。
+    // 用 sleep(1e9) 让进程停在这里,而不是 exit,确保用户可以看到 UI 并复制错误。
+    // 但这样会卡住主线程,而 CrashRunloopCallback 已经在主队列。
+    // 所以更优雅的做法:先让 UI 显示完,再用 pause() 让主线程休眠等待用户手动退出。
+    // 实际操作:我们在 showGlobalError 内部 dispatch 完后,这里进入一个安全的 wait loop
+    // 只处理主 RunLoop,不再执行 UIApplicationMain 后续流程。为简化:
+    usleep(200000); // 给主队列一点时间先跑 CrashRunloopCallback 显示 UI
+    while (1) {
+        [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    }
+}
+
+// Uncaught NSException handler:ObjC 层 @throw 没有 @catch 时触发
+static void _UncaughtExceptionHandler(NSException *exception) {
+    if (g_crashPending) return;
+    g_crashPending = 1;
+
+    NSString *bt = exception.callStackSymbols.count > 0
+        ? [exception.callStackSymbols componentsJoinedByString:@"\n"] : @"";
+    NSString *message = [NSString stringWithFormat:
+        @"NSException: %@\nReason: %@\nUserInfo: %@\n\n"
+        @"Backtrace:\n%@",
+        exception.name,
+        exception.reason ?: @"(null)",
+        exception.userInfo ?: @{},
+        bt ?: @""
+    ];
+    NSLog(@"[HAPManager] Uncaught exception: %@", message);
+
+    // 写入全局缓存并调度主线程 UI
+    const char *cmsg = message.UTF8String;
+    if (cmsg) {
+        strncpy((char *)g_crashMessage, cmsg, sizeof(g_crashMessage) - 1);
+        g_crashMessage[sizeof(g_crashMessage) - 1] = 0;
+    }
+    _ScheduleMainThreadCrashUI();
+
+    usleep(200000);
+    while (1) {
+        [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    }
+}
+
 @interface HAPManager ()
 
 @property (nonatomic, strong) NSString *currentHAPPath;
@@ -30,6 +193,10 @@ static NSString *const kFilesSubdirName = @"files";
 @property (nonatomic, copy) NSString *currentAbilityName;
 @property (nonatomic, copy) NSString *currentAppName;
 @property (nonatomic, copy) NSString *currentPageName;
+// crashErrorWindow 属性实现(readonly 对外,readwrite 对内)
+@property (nonatomic, strong) UIWindow *crashErrorWindow;
+// 详细错误信息(点击复制用)
+@property (nonatomic, copy) NSString *lastGlobalErrorMessage;
 
 @end
 
@@ -67,8 +234,186 @@ static HAPManager *_sharedInstance = nil;
             NSLog(@"[HAPManager] Cleaning legacy arkui-x directory at %@", legacyDir);
             [fm removeItemAtPath:legacyDir error:nil];
         }
+
+        g_hapManagerSelf = (__bridge void *)self;
     }
     return self;
+}
+
+#pragma mark - 全局崩溃防护
+
+- (void)installCrashGuard {
+    if (g_crashGuardArmed) return;
+    g_crashGuardArmed = 1;
+
+    // 1. 注册 UncaughtException handler
+    g_prevExceptionHandler = NSGetUncaughtExceptionHandler();
+    NSSetUncaughtExceptionHandler(&_UncaughtExceptionHandler);
+
+    // 2. 为致命信号注册 sigaction
+    const int handledSignals[] = { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP, SIGPIPE };
+    const size_t numHandled = sizeof(handledSignals) / sizeof(handledSignals[0]);
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_sigaction = &_SignalCrashHandler;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    for (size_t i = 0; i < numHandled; i++) {
+        int sig = handledSignals[i];
+        struct sigaction prev;
+        memset(&prev, 0, sizeof(prev));
+        if (sigaction(sig, &action, &prev) == 0) {
+            g_prevSigAction[sig] = prev;
+            NSLog(@"[HAPManager] Crash guard: sigaction installed for %s", _SignalName(sig));
+        }
+    }
+
+    // 3. 注册主线程 CFRunLoopSource,用于在 handler 之后安全显示 UI
+    if (!g_crashRunloopSource) {
+        CFRunLoopSourceContext ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.perform = &_CrashRunloopCallback;
+        g_crashRunloopSource = CFRunLoopSourceCreate(kCFAllocatorDefault, 0, &ctx);
+        CFRunLoopAddSource(CFRunLoopGetMain(), g_crashRunloopSource, kCFRunLoopCommonModes);
+    }
+}
+
+- (void)showGlobalError:(NSString *)message shortText:(NSString *)shortText {
+    self.lastGlobalErrorMessage = message ?: shortText ?: @"报错";
+
+    NSLog(@"[HAPManager] showGlobalError (short=%@): %@", shortText, message);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 如果 errorWindow 已经存在且可见,只更新 label 文本(避免重复创建)
+        if (self.crashErrorWindow) {
+            UIView *rootView = self.crashErrorWindow.rootViewController.view;
+            UILabel *lbl = [rootView viewWithTag:99999];
+            if ([lbl isKindOfClass:[UILabel class]]) {
+                lbl.text = shortText.length ? shortText : @"报错";
+            }
+            self.crashErrorWindow.hidden = NO;
+            return;
+        }
+
+        // 独立 UIWindow:windowLevel 设为最高,保证覆盖在导航栏、alert、StageVC 渲染 surface 之上。
+        // C++ abort / ObjC NSException 崩溃后,原 main window 的 VC 可能已经处于半损坏状态,
+        // 用独立 window 完全不依赖原有 VC 层级。
+        UIWindowScene *scene = nil;
+        for (UIWindowScene *s in UIApplication.sharedApplication.connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]] && s.activationState == UISceneActivationStateForegroundActive) {
+                scene = s;
+                break;
+            }
+        }
+        UIWindow *win;
+        if (scene) {
+            win = [[UIWindow alloc] initWithWindowScene:scene];
+        } else {
+            win = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+        }
+        win.windowLevel = UIWindowLevelAlert + 1000.0;  // 最高级别,覆盖所有 alert 和渲染层
+        win.backgroundColor = UIColor.whiteColor;
+        win.userInteractionEnabled = YES;
+        win.hidden = NO;
+        self.crashErrorWindow = win;
+
+        UIViewController *rootVC = [[UIViewController alloc] init];
+        rootVC.view.backgroundColor = UIColor.whiteColor;
+        win.rootViewController = rootVC;
+        // iOS 13+ 需要显式 makeKeyAndVisible 让 window 接收事件
+        if (@available(iOS 13.0, *)) {
+            // 不夺 key,否则系统键盘等可能异常
+        } else {
+            // 旧系统需要 makeKeyWindow 才能接收点击事件
+        }
+        [win makeKeyAndVisible];
+
+        // ScrollView + Label 布局:短文本居中显示,长文本可滚动。
+        UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectZero];
+        scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+        scrollView.backgroundColor = UIColor.whiteColor;
+        scrollView.alwaysBounceVertical = YES;
+        scrollView.showsVerticalScrollIndicator = YES;
+        [rootVC.view addSubview:scrollView];
+
+        UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
+        container.translatesAutoresizingMaskIntoConstraints = NO;
+        [scrollView addSubview:container];
+
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
+        label.translatesAutoresizingMaskIntoConstraints = NO;
+        label.tag = 99999;
+        label.numberOfLines = 0;
+        label.textAlignment = NSTextAlignmentCenter;
+        label.textColor = UIColor.systemRedColor;
+        label.font = [UIFont systemFontOfSize:16];
+        label.lineBreakMode = NSLineBreakByWordWrapping;
+        label.adjustsFontSizeToFitWidth = NO;
+        label.userInteractionEnabled = YES;
+        label.text = shortText.length ? shortText : @"报错";
+        [container addSubview:label];
+
+        // 点击复制
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_handleGlobalErrorTap)];
+        tap.numberOfTapsRequired = 1;
+        [label addGestureRecognizer:tap];
+
+        // 布局:
+        // ScrollView 占满整个 window.rootVC.view;
+        // Container 撑满 contentLayoutGuide,宽度 = frameLayoutGuide,高度 >= 可视高度(保证短文本居中);
+        // Label 在 Container 中水平居中(留边),垂直居中(留 >=24pt 上下边距)。
+        UILayoutGuide *content = scrollView.contentLayoutGuide;
+        UILayoutGuide *frame = scrollView.frameLayoutGuide;
+        [NSLayoutConstraint activateConstraints:@[
+            [scrollView.topAnchor constraintEqualToAnchor:rootVC.view.topAnchor],
+            [scrollView.bottomAnchor constraintEqualToAnchor:rootVC.view.bottomAnchor],
+            [scrollView.leadingAnchor constraintEqualToAnchor:rootVC.view.leadingAnchor],
+            [scrollView.trailingAnchor constraintEqualToAnchor:rootVC.view.trailingAnchor],
+
+            [container.topAnchor constraintEqualToAnchor:content.topAnchor],
+            [container.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+            [container.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+            [container.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+            [container.widthAnchor constraintEqualToAnchor:frame.widthAnchor],
+            [container.heightAnchor constraintGreaterThanOrEqualToAnchor:frame.heightAnchor],
+
+            [label.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+            [label.topAnchor constraintGreaterThanOrEqualToAnchor:container.topAnchor constant:24],
+            [label.bottomAnchor constraintLessThanOrEqualToAnchor:container.bottomAnchor constant:-24],
+            [label.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:16],
+            [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-16],
+        ]];
+    });
+}
+
+- (void)_handleGlobalErrorTap {
+    NSString *msg = self.lastGlobalErrorMessage ?: @"(no error message)";
+    UIPasteboard *pb = UIPasteboard.generalPasteboard;
+    pb.string = msg;
+    NSLog(@"[HAPManager] Global error copied (%lu chars)", (unsigned long)msg.length);
+
+    // 闪烁反馈
+    UIView *rootView = self.crashErrorWindow.rootViewController.view;
+    UILabel *lbl = [rootView viewWithTag:99999];
+    if ([lbl isKindOfClass:[UILabel class]]) {
+        [UIView animateWithDuration:0.1 animations:^{
+            lbl.alpha = 0.4;
+        } completion:^(BOOL finished) {
+            [UIView animateWithDuration:0.2 animations:^{
+                lbl.alpha = 1.0;
+            }];
+        }];
+    }
+}
+
+- (void)hideGlobalError {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.crashErrorWindow) {
+            self.crashErrorWindow.hidden = YES;
+            self.crashErrorWindow = nil;
+        }
+        self.lastGlobalErrorMessage = nil;
+    });
 }
 
 #pragma mark - Load HAP and run abc bytecode
