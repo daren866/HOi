@@ -28,6 +28,8 @@ static NSString *const kFilesSubdirName = @"files";
 @property (nonatomic, copy) NSString *currentBundleName;
 @property (nonatomic, copy) NSString *currentModuleName;
 @property (nonatomic, copy) NSString *currentAbilityName;
+@property (nonatomic, copy) NSString *currentAppName;
+@property (nonatomic, copy) NSString *currentPageName;
 
 @end
 
@@ -119,12 +121,14 @@ static HAPManager *_sharedInstance = nil;
         NSUInteger totalSubpaths = [[fm subpathsOfDirectoryAtPath:extractDir error:nil] count];
         NSLog(@"[HAPManager] Total subpaths under extract dir: %lu", (unsigned long)totalSubpaths);
 
-        // 从解压目录中读取 module.json,解析出运行 abc 所需的 bundleName/moduleName/abilityName。
+        // 从解压目录中读取 module.json/module.json5,解析出运行 abc 所需的 bundleName/moduleName/abilityName,
+        // 同时提取 appName(展示名)和 pageName(入口界面名)。
         NSString *appName = [hapPath lastPathComponent];
         appName = [appName stringByReplacingOccurrencesOfString:@".hap" withString:@""];
         NSString *bundleName = kDefaultBundleName;
         NSString *moduleName = kDefaultModuleName;
         NSString *abilityName = kDefaultAbilityName;
+        NSString *pageName = @"";
 
         NSDictionary *moduleInfo = [self parseModuleJsonInDirectory:extractDir];
         if (moduleInfo) {
@@ -140,6 +144,16 @@ static HAPManager *_sharedInstance = nil;
             if (moduleInfo[@"abilityName"]) {
                 abilityName = moduleInfo[@"abilityName"];
             }
+            if (moduleInfo[@"pageName"]) {
+                pageName = moduleInfo[@"pageName"];
+            }
+        } else {
+            // module.json/json5 都没找到,hap 损坏或不是 ArkTS 产物,直接报错而不是继续走下去闪退。
+            [fm removeItemAtPath:extractDir error:nil];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, @"module.json/module.json5 not found or invalid in HAP");
+            });
+            return;
         }
 
         // 校验解压结果中确实存在 abc 字节码文件,否则没必要继续。
@@ -187,6 +201,8 @@ static HAPManager *_sharedInstance = nil;
         self.currentBundleName = bundleName;
         self.currentModuleName = moduleName;
         self.currentAbilityName = abilityName;
+        self.currentAppName = appName;
+        self.currentPageName = pageName;
 
         // 在主线程调用 StageApplication 配置 bundle 目录并启动 ArkUI 运行时,
         // 这一步会把 hap 中的 modules.abc 等 abc 字节码加载进 ArkUI-X 虚拟机并执行入口逻辑。
@@ -225,6 +241,10 @@ static HAPManager *_sharedInstance = nil;
                     stringByAppendingPathComponent:[NSString stringWithFormat:@"%@/ets", moduleName]];
                 NSArray *etsFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:etsDir error:nil];
                 NSLog(@"[HAPManager] ets dir contents: %@", etsFiles);
+                // abc 字节码缺失会让 AppMain::DispatchOnCreate 在 StageViewController.viewDidLoad 里崩,
+                // 提前拦截,把错误用红色文本展示而不是让 app 闪退。
+                completion(NO, [NSString stringWithFormat:@"abc bytecode not found at %@", abcPath]);
+                return;
             }
 
             // launchApplication 内部会注册 NSNotificationCenter observer、初始化 AppMain 单例、
@@ -326,6 +346,7 @@ static HAPManager *_sharedInstance = nil;
                 NSString *bundleName = kDefaultBundleName;
                 NSString *moduleName = kDefaultModuleName;
                 NSString *abilityName = kDefaultAbilityName;
+                NSString *pageName = @"";
 
                 NSString *tempDir = NSTemporaryDirectory();
                 NSString *extractDir = [tempDir stringByAppendingPathComponent:@"hap_list_extract"];
@@ -349,17 +370,24 @@ static HAPManager *_sharedInstance = nil;
                         if (moduleInfo[@"abilityName"]) {
                             abilityName = moduleInfo[@"abilityName"];
                         }
+                        if ([moduleInfo[@"pageName"] length] > 0) {
+                            pageName = moduleInfo[@"pageName"];
+                        }
                     }
                     [fm removeItemAtPath:extractDir error:nil];
                 }
 
-                NSDictionary *hapInfo = @{
+                NSMutableDictionary *hapInfo = [@{
                     @"path": hapPath,
                     @"appName": appName,
                     @"bundleName": bundleName,
                     @"moduleName": moduleName,
                     @"abilityName": abilityName
-                };
+                } mutableCopy];
+                // pageName 可选,只在解析到 srcEntry 时存在,用于在列表副标题展示入口界面名。
+                if (pageName.length > 0) {
+                    hapInfo[@"pageName"] = pageName;
+                }
                 [hapInfoList addObject:hapInfo];
             }
         }
@@ -425,6 +453,8 @@ static HAPManager *_sharedInstance = nil;
     self.currentBundleName = nil;
     self.currentModuleName = nil;
     self.currentAbilityName = nil;
+    self.currentAppName = nil;
+    self.currentPageName = nil;
     // 注意:这里不重置 isArkUIRunning=NO。因为 StageApplication launchApplication 只能调一次,
     // 重复调用会重复注册 NotificationCenter observer 并二次初始化 AppMain 单例导致崩溃。
     // isArkUIRunning 保持 YES,后续 loadHAP 只走 configModule 路径重载新 hap 的 abc 字节码。
@@ -485,31 +515,64 @@ static HAPManager *_sharedInstance = nil;
     return YES;
 }
 
-#pragma mark - module.json parsing
+#pragma mark - module.json / module.json5 parsing
 
-// 在 hap 解压目录中定位 module.json(可能在根目录,也可能在 entry/ 子目录下),
-// 解析出 bundleName(来自 app.bundleName)、moduleName(来自 module.name)、
-// 以及 abilityName(取 module.abilities[0].name 或 module.mainElement)。
+// 在 hap 解压目录中定位 module.json 或 module.json5(优先 module.json,因为它是 ArkTS 编译产物;
+// module.json5 是源码格式,可能含注释、尾随逗号等 JSON5 扩展语法,某些 hap 解压后只保留 module.json5)。
+// 文件可能在根目录,也可能在 entry/ 子目录下。解析出:
+//   bundleName(来自 app.bundleName)
+//   moduleName(来自 module.name)
+//   abilityName(取 module.abilities[0].name 或 module.mainElement)
+//   appName(展示名,优先级:abilities[0].label 字符串 > module.name > bundleName)
+//   pageName(入口界面名,取 abilities[0].srcEntry 末尾文件名,如 "Index")
 - (NSDictionary *)parseModuleJsonInDirectory:(NSString *)extractDir {
-    NSString *moduleJsonPath = [extractDir stringByAppendingPathComponent:@"module.json"];
-    if (![[NSFileManager defaultManager] fileExistsAtPath:moduleJsonPath]) {
-        // 兼容某些 hap 解压后 module.json 位于 entry/ 子目录的情况。
-        NSString *entryDir = [extractDir stringByAppendingPathComponent:@"entry"];
-        moduleJsonPath = [entryDir stringByAppendingPathComponent:@"module.json"];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    // 候选路径:依次尝试 根目录/module.json、根目录/module.json5、entry/module.json、entry/module.json5。
+    NSArray<NSString *> *candidates = @[
+        [extractDir stringByAppendingPathComponent:@"module.json"],
+        [extractDir stringByAppendingPathComponent:@"module.json5"],
+        [[extractDir stringByAppendingPathComponent:@"entry"] stringByAppendingPathComponent:@"module.json"],
+        [[extractDir stringByAppendingPathComponent:@"entry"] stringByAppendingPathComponent:@"module.json5"],
+    ];
+
+    NSString *moduleJsonPath = nil;
+    BOOL isJson5 = NO;
+    for (NSString *candidate in candidates) {
+        if ([fm fileExistsAtPath:candidate]) {
+            moduleJsonPath = candidate;
+            isJson5 = [candidate hasSuffix:@".json5"];
+            break;
+        }
     }
 
-    if (![[NSFileManager defaultManager] fileExistsAtPath:moduleJsonPath]) {
+    if (!moduleJsonPath) {
         return nil;
     }
 
-    NSData *jsonData = [NSData dataWithContentsOfFile:moduleJsonPath];
-    if (!jsonData) {
+    NSData *rawData = [NSData dataWithContentsOfFile:moduleJsonPath];
+    if (!rawData) {
         return nil;
+    }
+
+    // module.json5 是 JSON5 格式,可能含 // 行注释、/* */ 块注释、尾随逗号,
+    // NSJSONSerialization 不支持,需要先剥离这些扩展语法再解析。
+    NSData *jsonData = rawData;
+    if (isJson5) {
+        NSString *json5String = [[NSString alloc] initWithData:rawData encoding:NSUTF8StringEncoding];
+        NSString *stripped = [self stripJson5Comments:json5String];
+        if (stripped.length == 0) {
+            return nil;
+        }
+        jsonData = [stripped dataUsingEncoding:NSUTF8StringEncoding];
+        if (!jsonData) {
+            return nil;
+        }
     }
 
     NSError *error = nil;
     NSDictionary *jsonDict = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
-    if (error || !jsonDict) {
+    if (error || ![jsonDict isKindOfClass:[NSDictionary class]]) {
+        NSLog(@"[HAPManager] Failed to parse %@: %@", moduleJsonPath, error.localizedDescription);
         return nil;
     }
 
@@ -531,10 +594,6 @@ static HAPManager *_sharedInstance = nil;
     NSString *moduleName = moduleObj[@"name"];
     if ([moduleName isKindOfClass:[NSString class]] && moduleName.length > 0) {
         result[@"moduleName"] = moduleName;
-        // 把 module 名也作为展示名,UI 上更友好。
-        if (!result[@"appName"]) {
-            result[@"appName"] = moduleName;
-        }
     }
 
     NSString *mainElement = moduleObj[@"mainElement"];
@@ -542,7 +601,8 @@ static HAPManager *_sharedInstance = nil;
         result[@"abilityName"] = mainElement;
     }
 
-    // 优先从 abilities 数组中取第一个 ability 名,作为运行 abc 的真实入口。
+    // 优先从 abilities 数组中取第一个 ability 名,作为运行 abc 的真实入口;
+    // 同时从中提取 label(应用展示名)和 srcEntry(入口界面文件路径)。
     NSArray *abilities = moduleObj[@"abilities"];
     if ([abilities isKindOfClass:[NSArray class]] && abilities.count > 0) {
         NSDictionary *firstAbility = abilities[0];
@@ -551,6 +611,33 @@ static HAPManager *_sharedInstance = nil;
             if ([abilityName isKindOfClass:[NSString class]] && abilityName.length > 0) {
                 result[@"abilityName"] = abilityName;
             }
+
+            // 应用展示名:优先取 label(若为 $string:xxx 资源引用,无法解析则回退到 moduleName)。
+            // 这里只接受纯字符串 label,$string:app_name 这种引用资源无法在 iOS 侧解析资源表,
+            // 直接保留为字符串透传给上层,上层可选择性展示。
+            NSString *label = firstAbility[@"label"];
+            if ([label isKindOfClass:[NSString class]] && label.length > 0) {
+                result[@"appName"] = label;
+            }
+
+            // 入口界面文件路径(如 "./ets/pages/Index.ets"),取末尾文件名作为 pageName。
+            // 这是 hap 编译时 ArkTS 编译器写入的真实页面入口,用于在播放界面顶部展示当前渲染的页面。
+            NSString *srcEntry = firstAbility[@"srcEntry"];
+            if ([srcEntry isKindOfClass:[NSString class]] && srcEntry.length > 0) {
+                NSString *pageName = [self pageNameFromSrcEntry:srcEntry];
+                if (pageName.length > 0) {
+                    result[@"pageName"] = pageName;
+                }
+            }
+        }
+    }
+
+    // appName 兜底:如果 abilities 里没取到 label,用 moduleName 作为展示名。
+    if (!result[@"appName"]) {
+        if (result[@"moduleName"]) {
+            result[@"appName"] = result[@"moduleName"];
+        } else if (result[@"bundleName"]) {
+            result[@"appName"] = result[@"bundleName"];
         }
     }
 
@@ -565,7 +652,114 @@ static HAPManager *_sharedInstance = nil;
         result[@"abilityName"] = kDefaultAbilityName;
     }
 
+    NSLog(@"[HAPManager] Parsed %@: bundleName=%@ moduleName=%@ abilityName=%@ appName=%@ pageName=%@",
+          moduleJsonPath.lastPathComponent,
+          result[@"bundleName"], result[@"moduleName"], result[@"abilityName"],
+          result[@"appName"], result[@"pageName"] ?: @"(none)");
+
     return result;
+}
+
+// 剥离 JSON5 扩展语法:行注释 //、块注释 /* */、尾随逗号(},] 前的多余逗号)。
+// 同时保留字符串字面量内的注释标记不被误删。这是 JSON5 → JSON 的最小可行转换,
+// 不处理十六进制/Inf/NaN 等更激进的扩展(hap 内 module.json5 一般不会用到)。
+- (NSString *)stripJson5Comments:(NSString *)json5 {
+    if (json5.length == 0) {
+        return json5;
+    }
+
+    NSUInteger length = json5.length;
+    NSMutableString *result = [NSMutableString stringWithCapacity:length];
+
+    // 用 unichar 逐字符扫描,状态机区分:普通、字符串内、行注释、块注释。
+    enum { StateNormal, StateString, StateLineComment, StateBlockComment } state = StateNormal;
+    unichar prev = 0;
+    BOOL stringEscape = NO;
+
+    for (NSUInteger i = 0; i < length; i++) {
+        unichar ch = [json5 characterAtIndex:i];
+        unichar next = (i + 1 < length) ? [json5 characterAtIndex:i + 1] : 0;
+
+        switch (state) {
+            case StateNormal:
+                if (ch == '"') {
+                    [result appendFormat:@"%C", ch];
+                    state = StateString;
+                    stringEscape = NO;
+                } else if (ch == '/' && next == '/') {
+                    state = StateLineComment;
+                    i++; // 跳过下一个 '/'
+                } else if (ch == '/' && next == '*') {
+                    state = StateBlockComment;
+                    i++; // 跳过 '*'
+                } else {
+                    [result appendFormat:@"%C", ch];
+                }
+                break;
+            case StateString:
+                [result appendFormat:@"%C", ch];
+                if (stringEscape) {
+                    stringEscape = NO;
+                } else if (ch == '\\') {
+                    stringEscape = YES;
+                } else if (ch == '"') {
+                    state = StateNormal;
+                }
+                break;
+            case StateLineComment:
+                // 行注释直到 \n,保留换行符避免行号变化影响报错信息。
+                if (ch == '\n') {
+                    [result appendFormat:@"%C", ch];
+                    state = StateNormal;
+                }
+                break;
+            case StateBlockComment:
+                // 块注释到 */ 结束,块注释整体替换为一个空格避免 token 粘连。
+                if (prev == '*' && ch == '/') {
+                    [result appendString:@" "];
+                    state = StateNormal;
+                }
+                break;
+        }
+        prev = ch;
+    }
+
+    // 移除尾随逗号:}, ] 前的多余逗号,NSJSONSerialization 在严格模式下不接受。
+    // 用正则把 ",\s*}" 替换为 "}",",\s*]" 替换为 "]"。
+    NSError *regexError = nil;
+    NSRegularExpression *trailingCommaObj =
+        [NSRegularExpression regularExpressionWithPattern:@",\\s*\\}" options:0 error:&regexError];
+    if (!regexError) {
+        result = [[trailingCommaObj stringByReplacingMatchesInString:result
+                                                              options:0
+                                                                range:NSMakeRange(0, result.length)
+                                                         withTemplate:@"}"] mutableCopy];
+    }
+    NSRegularExpression *trailingCommaArr =
+        [NSRegularExpression regularExpressionWithPattern:@",\\s*\\]" options:0 error:&regexError];
+    if (!regexError) {
+        result = [[trailingCommaArr stringByReplacingMatchesInString:result
+                                                              options:0
+                                                                range:NSMakeRange(0, result.length)
+                                                         withTemplate:@"]"] mutableCopy];
+    }
+
+    return result;
+}
+
+// 从 srcEntry(如 "./ets/pages/Index.ets" 或 "./ets/pages/Index")提取页面名 "Index"。
+// 取最后一段路径,再去掉扩展名。
+- (NSString *)pageNameFromSrcEntry:(NSString *)srcEntry {
+    if (srcEntry.length == 0) {
+        return @"";
+    }
+    NSString *lastComponent = [srcEntry lastPathComponent];
+    // 去掉扩展名(如果有)。
+    NSString *ext = [lastComponent pathExtension];
+    if (ext.length > 0) {
+        lastComponent = [lastComponent stringByDeletingPathExtension];
+    }
+    return lastComponent ?: @"";
 }
 
 // 检查解压目录中是否包含 ArkTS 编译产物 abc 字节码文件,这是 hap 能否被运行的关键依据。
