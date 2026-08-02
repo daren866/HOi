@@ -99,8 +99,7 @@ jobs:
         TRIED_URLS=""
 
         for url in "${SDK_URLS[@]}"; do
-          TRIED_URLS="$TRIED_URLS
-  - $url"
+          TRIED_URLS="${TRIED_URLS}\n  - ${url}"
           echo "━━━ Trying: $url ━━━"
           HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
           echo "HTTP status: $HTTP_CODE"
@@ -310,8 +309,7 @@ jobs:
             # 也可能不包含 lib 前缀(按 xcframework 的 Info.plist 的 bundle name 链接)。
             # 直接按 FW_NAME 加 -framework, 链接器会自动在 FRAMEWORK_SEARCH_PATHS 中定位。
             FW_LINK_FLAGS="$FW_LINK_FLAGS -framework $FW_NAME"
-            EMBED_LIST="$EMBED_LIST
-$FW_NAME"
+            EMBED_LIST="${EMBED_LIST}\n${FW_NAME}"
           done <<< "$FRAMEWORKS_IN_DIR"
 
           LIBRARY_SEARCH_PATHS="\$(SRCROOT)/Frameworks"
