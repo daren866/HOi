@@ -12,6 +12,35 @@
 #import <signal.h>
 #import <execinfo.h>
 #import <mach/mach.h>
+#import <objc/runtime.h>
+
+// ArkUI-X 运行时内部通过 getApplicationTopViewController 获取导航栈顶 VC,
+// 然后异步调用 instanceName。当栈顶是非 StageViewController(如 HAPViewController、
+// UINavigationController 等)时,会触发 unrecognized selector 崩溃。
+// 通过 +load 在 UIViewController 基类注入默认 instanceName 实现(返回 nil),
+// StageViewController 子类自己的 instanceName 会覆盖此默认实现,不受影响。
+@interface UIViewController (ArkUISafe)
+@end
+
+@implementation UIViewController (ArkUISafe)
++ (void)load {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        SEL sel = @selector(instanceName);
+        // class_getInstanceMethod 只搜索当前类及其父类,不会搜索子类。
+        // UIViewController 本身没有 instanceName(只有 StageViewController 子类有),
+        // 所以这里返回 NULL,然后 class_addMethod 添加默认实现。
+        Method m = class_getInstanceMethod(self, sel);
+        if (!m) {
+            IMP imp = imp_implementationWithBlock(^NSString *(id _self) {
+                return nil;
+            });
+            class_addMethod(self, sel, imp, "@@:");
+            NSLog(@"[HAPManager] UIViewController+ArkUISafe: added default instanceName to UIViewController base class");
+        }
+    });
+}
+@end
 
 // module.json 中常见字段名常量,用于解析 hap 的运行时入口信息。
 static NSString *const kDefaultModuleName = @"entry";
