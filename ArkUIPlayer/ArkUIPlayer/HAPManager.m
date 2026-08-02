@@ -1523,7 +1523,7 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
     }
 
-    // ets 目录下 abc 文件完整列表
+    // ets 目录下 abc 文件完整列表 + Panda 字节码版本检查。
     NSString *etsDir = [moduleDir stringByAppendingPathComponent:@"ets"];
     NSDirectoryEnumerator *etsEnum = [fm enumeratorAtPath:etsDir];
     NSMutableArray<NSString *> *abcFiles = [NSMutableArray array];
@@ -1533,6 +1533,53 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
     }
     NSLog(@"[HAPManager] ets/*.abc files (%lu): %@", (unsigned long)abcFiles.count, abcFiles);
+
+    // 检测每个 abc 的 Panda bytecode 版本,与当前 iOS 壳工程 ArkUI-X runtime 支持的
+    // 最大版本(9.0.0.0)比对。不匹配时直接用 showGlobalError 展示清晰错误,
+    // 避免后续 launchApplication 后 SIGSEGV 崩溃,让用户能直接看到原因。
+    // Panda abc 头格式:magic("PANDA" 5 bytes)+version(major.minor.patch.build,4 uint8,通常大端)。
+    const int kMaxSupportedPandaVersionMajor = 9;
+    for (NSString *abcRel in abcFiles) {
+        NSString *abcFull = [etsDir stringByAppendingPathComponent:abcRel];
+        NSData *header = [NSData dataWithContentsOfFile:abcFull options:0 error:nil];
+        if (header.length < 9) continue;
+
+        const unsigned char *bytes = (const unsigned char *)header.bytes;
+        // 前 5 字节应为 PANDA magic
+        if (!(bytes[0]=='P' && bytes[1]=='A' && bytes[2]=='N' && bytes[3]=='D' && bytes[4]=='A')) {
+            continue;
+        }
+        // 第 6~9 字节:version.major, version.minor, version.patch, version.build
+        int major = bytes[5];
+        int minor = bytes[6];
+        int patch = bytes[7];
+        int build = bytes[8];
+        NSLog(@"[HAPManager] abc %@ panda bytecode version=%d.%d.%d.%d (max supported=%d.0.0.0)",
+              abcRel, major, minor, patch, build, kMaxSupportedPandaVersionMajor);
+
+        if (major > kMaxSupportedPandaVersionMajor) {
+            NSString *msg = [NSString stringWithFormat:
+                @"Panda 字节码版本过新,ArkUI-X runtime 无法加载。\n\n"
+                @"abc 文件: %@\n"
+                @"字节码版本: %d.%d.%d.%d\n"
+                @"运行时支持最高版本: %d.0.0.0\n\n"
+                @"可能的原因:\n"
+                @"1. hap 使用 DevEco Studio 新版本 SDK (Restool 6.1+) 打包,生成 bytecode 12.x,\n"
+                @"   但当前 iOS 壳工程里的 libarkui_ios.framework 只支持 bytecode 9.x。\n\n"
+                @"修复方案(二选一):\n"
+                @"A) 使用与壳工程 runtime 匹配的旧版 DevEco Studio / hvigor 重新打包 hap\n"
+                @"   (需要生成 bytecode 9.0.0.0)。\n"
+                @"B) 升级 iOS 壳工程中的 ArkUI-X SDK (libarkui_ios.framework 等) 到与 hap\n"
+                @"   同一 SDK 版本,使 runtime 支持 bytecode %d.x。\n\n"
+                @"运行时原始报错:\n"
+                @"'Unable to open file with bytecode version %d.%d.%d.%d'\n"
+                @"'Maximum supported version is %d.0.0.0. Please upgrade runtime...'",
+                abcRel, major, minor, patch, build, kMaxSupportedPandaVersionMajor,
+                major, major, minor, patch, build, kMaxSupportedPandaVersionMajor];
+            NSLog(@"[HAPManager] ❌ Panda bytecode version mismatch: %@", msg);
+            [self showGlobalError:msg shortText:@"abc版本过低"];
+        }
+    }
     NSLog(@"[HAPManager] =====================================================");
 
     // ---- 2. 合成 AppScope/app.json (若缺失) ----
