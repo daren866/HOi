@@ -1170,9 +1170,12 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
 // 文件可能在根目录,也可能在 entry/ 子目录下。解析出:
 //   bundleName(来自 app.bundleName)
 //   moduleName(来自 module.name)
-//   abilityName(取 module.abilities[0].name 或 module.mainElement)
-//   appName(展示名,优先级:abilities[0].label 字符串 > module.name > bundleName)
-//   pageName(入口界面名,取 abilities[0].srcEntry 末尾文件名,如 "Index")
+//   abilityName(优先 module.mainElement;缺失时回退 module.abilities[0].name。
+//               mainElement 是 ArkTS 编译器注册到 abc 字节码里的 Ability 类名,
+//               abilities[].name 可能是 bundle 前缀的全局唯一 ID,与 abc 内类名不一致,
+//               用错会导致 AppMain::DispatchOnCreate 在 abc 中找不到 Ability 类 → 白屏。)
+//   appName(展示名,优先级:name==mainElement 的 ability 的 label 字符串 > module.name > bundleName)
+//   pageName(入口界面名,取 name==mainElement 的 ability 的 srcEntry 末尾文件名,如 "Index")
 - (NSDictionary *)parseModuleJsonInDirectory:(NSString *)extractDir {
     NSFileManager *fm = [NSFileManager defaultManager];
     // 候选路径:依次尝试 根目录/module.json、根目录/module.json5、entry/module.json、entry/module.json5。
@@ -1280,33 +1283,63 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         result[@"moduleName"] = moduleName;
     }
 
+    // 入口 ability 名优先级:
+    //   1) module.mainElement  — ArkTS 编译器注册到 abc 字节码里的 Ability 类名(对应 .ets 源文件中的类),
+    //      StageViewController.initWithInstanceName 把它拼进 instanceName 传给 AppMain::DispatchOnCreate,
+    //      AppMain 在 abc 中按此名查找 Ability 类。缺失时 abc 内查不到 → 白屏。
+    //   2) module.abilities[0].name — 仅作 fallback。HarmonyOS 标准产物中两者相同,
+    //      但部分 hap 把 abilities[].name 写成"bundle前缀+类名"的全局唯一 ID(如
+    //      "HarmonyoscomponentuxexamplesphoneAbility"),与 abc 内的类名("PhoneAbility")不一致。
+    //      此时若用 abilities[0].name 覆盖 mainElement,AppMain 在 abc 中找不到对应类 → 白屏不渲染。
+    //   因此:**mainElement 优先**,仅当 mainElement 缺失时才回退到 abilities[0].name。
     NSString *mainElement = moduleObj[@"mainElement"];
     if ([mainElement isKindOfClass:[NSString class]] && mainElement.length > 0) {
         result[@"abilityName"] = mainElement;
     }
 
-    // 优先从 abilities 数组中取第一个 ability 名,作为运行 abc 的真实入口;
-    // 同时从中提取 label(应用展示名)和 srcEntry(入口界面文件路径)。
+    // 从 abilities 数组中取 label(展示名)和 srcEntry(入口界面文件路径)。
+    // 注意:不直接用 abilities[0],而是优先找 name == mainElement 的那个 ability,
+    // 这样多 ability 的 hap 也能取到与入口匹配的 label/srcEntry;找不到时再回退到 abilities[0]。
+    // abilityName 字段此处不再被 abilities[0].name 覆盖(已由 mainElement 决定),
+    // 仅在 mainElement 缺失时才用 abilities[0].name 作为兜底。
     NSArray *abilities = moduleObj[@"abilities"];
     if ([abilities isKindOfClass:[NSArray class]] && abilities.count > 0) {
-        NSDictionary *firstAbility = abilities[0];
-        if ([firstAbility isKindOfClass:[NSDictionary class]]) {
-            NSString *abilityName = firstAbility[@"name"];
-            if ([abilityName isKindOfClass:[NSString class]] && abilityName.length > 0) {
-                result[@"abilityName"] = abilityName;
+        NSDictionary *entryAbility = nil;
+        if (mainElement.length > 0) {
+            for (NSDictionary *ab in abilities) {
+                if (![ab isKindOfClass:[NSDictionary class]]) continue;
+                NSString *abName = ab[@"name"];
+                if ([abName isKindOfClass:[NSString class]] && [abName isEqualToString:mainElement]) {
+                    entryAbility = ab;
+                    break;
+                }
             }
-
+        }
+        if (!entryAbility) {
+            // 没找到与 mainElement 同名的 ability,回退到 abilities[0]。
+            // 此时若 mainElement 也缺失,则用 abilities[0].name 作为 abilityName 兜底。
+            entryAbility = abilities[0];
+            if ([entryAbility isKindOfClass:[NSDictionary class]]) {
+                if (!result[@"abilityName"]) {
+                    NSString *abilityName = entryAbility[@"name"];
+                    if ([abilityName isKindOfClass:[NSString class]] && abilityName.length > 0) {
+                        result[@"abilityName"] = abilityName;
+                    }
+                }
+            }
+        }
+        if ([entryAbility isKindOfClass:[NSDictionary class]]) {
             // 应用展示名:优先取 label(若为 $string:xxx 资源引用,无法解析则回退到 moduleName)。
             // 这里只接受纯字符串 label,$string:app_name 这种引用资源无法在 iOS 侧解析资源表,
             // 直接保留为字符串透传给上层,上层可选择性展示。
-            NSString *label = firstAbility[@"label"];
+            NSString *label = entryAbility[@"label"];
             if ([label isKindOfClass:[NSString class]] && label.length > 0) {
                 result[@"appName"] = label;
             }
 
             // 入口界面文件路径(如 "./ets/pages/Index.ets"),取末尾文件名作为 pageName。
             // 这是 hap 编译时 ArkTS 编译器写入的真实页面入口,用于在播放界面顶部展示当前渲染的页面。
-            NSString *srcEntry = firstAbility[@"srcEntry"];
+            NSString *srcEntry = entryAbility[@"srcEntry"];
             if ([srcEntry isKindOfClass:[NSString class]] && srcEntry.length > 0) {
                 NSString *pageName = [self pageNameFromSrcEntry:srcEntry];
                 if (pageName.length > 0) {
