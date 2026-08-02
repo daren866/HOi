@@ -81,18 +81,22 @@ jobs:
         # ArkUI-X SDK 6.1.1.100 (API 24, Release) — 官方 GRS 公开直链
         # arm64: 541MB  x64: 515MB
         # URL 来源: DevEco Studio commandline-tools 6.1.1.300 内 SDK Manager 的 GRS 服务
-        SDK_URL_ARM64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
-        SDK_URL_X64="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+        # 注意: contentcenter-drcn (中国区 CDN) 可能对海外 GitHub Actions runner 不可达,
+        # 所以同时提供 contentcenter (全球 CDN) 镜像作为备选。
+        SDK_URL_ARM64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_ARM64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/8e/v3/y0pp6BviSuewxZ7RlckZ0Q/himCFIF5Sn2VVQpVdS9VMQ.zip"
+        SDK_URL_X64_DRCN="https://contentcenter-drcn.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
+        SDK_URL_X64_GLOBAL="https://contentcenter.dbankcdn.cn/pub_1/DevEcoSpace_1_900_9/69/v3/AyLOGKYbRNCurj82Pes5WA/ijU9rC7tTKeituiO6Ol8Bg.zip"
 
         # 回退: 旧版 1.0.0.0 (API 10, bytecode 9.x) — 仅在前者全失败时使用
         SDK_URL_FALLBACK_ARM64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-arm64-1.0.0.0-Release.zip"
         SDK_URL_FALLBACK_X64="https://repo.huaweicloud.com/arkui-crossplatform/sdk/1.0.0.0/darwin/arkui-x-darwin-x64-1.0.0.0-Release.zip"
 
-        # 按架构优先排列, 再回退到另一架构, 最后旧版
+        # 按架构优先排列: 先 drcn(中国区) → global(全球) → 另一架构 → 旧版回退
         if [ "$HOST_ARCH" = "arm64" ]; then
-          SDK_URLS=("$SDK_URL_ARM64" "$SDK_URL_X64" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
+          SDK_URLS=("$SDK_URL_ARM64_DRCN" "$SDK_URL_ARM64_GLOBAL" "$SDK_URL_X64_DRCN" "$SDK_URL_X64_GLOBAL" "$SDK_URL_FALLBACK_ARM64" "$SDK_URL_FALLBACK_X64")
         else
-          SDK_URLS=("$SDK_URL_X64" "$SDK_URL_ARM64" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
+          SDK_URLS=("$SDK_URL_X64_DRCN" "$SDK_URL_X64_GLOBAL" "$SDK_URL_ARM64_DRCN" "$SDK_URL_ARM64_GLOBAL" "$SDK_URL_FALLBACK_X64" "$SDK_URL_FALLBACK_ARM64")
         fi
 
         DOWNLOAD_SUCCESS=0
@@ -106,7 +110,7 @@ jobs:
           [ "$HTTP_CODE" != "200" ] && { echo "⚠️ Not available, skipping"; continue; }
 
           echo "Starting download..."
-          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 600 --retry 2 --retry-delay 5; then
+          if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 1200 --retry 2 --retry-delay 5; then
             file_size=$(wc -c < arkui-x-sdk.zip)
             echo "Downloaded: $file_size bytes ($(($file_size/1024/1024))MB)"
 
@@ -393,16 +397,17 @@ jobs:
             # 字体(HMSymbolVF.ttf/HarmonyOS_Sans_Notdef.ttf)、ICU 数据(icudt74l.dat 31MB)、
             # resources.index、系统图标(svg)。缺这些运行时 LogWrapper::PrintLog 会因
             # ICU 未初始化而 SIGSEGV (addr=0xa)。
-            SYSTEMRES_SRC=$(find arkui-x-sdk -type d -name "systemres" -path "*/engine/*" | head -1)
+            # 注意: 当前工作目录是 ArkUIPlayer/, arkui-x-sdk 在上级目录, 用 GITHUB_WORKSPACE 绝对路径。
+            SYSTEMRES_SRC=$(find "$GITHUB_WORKSPACE/arkui-x-sdk" -type d -name "systemres" -path "*/engine/*" 2>/dev/null | head -1)
             if [ -n "$SYSTEMRES_SRC" ] && [ -d "$SYSTEMRES_SRC" ]; then
-              echo "📦 Copying systemres from SDK to app bundle..."
+              echo "📦 Copying systemres from $SYSTEMRES_SRC to app bundle..."
               cp -R "$SYSTEMRES_SRC" "$APP_PATH/"
               echo "  systemres size: $(du -sh "$APP_PATH/systemres/" | cut -f1)"
               ls "$APP_PATH/systemres/"
             else
               echo "⚠️ systemres not found in SDK! Runtime will crash without ICU data."
-              echo "  Searched: arkui-x-sdk -type d -name systemres -path */engine/*"
-              find arkui-x-sdk -name "systemres" -type d
+              echo "  Searched: $GITHUB_WORKSPACE/arkui-x-sdk -type d -name systemres -path */engine/*"
+              find "$GITHUB_WORKSPACE/arkui-x-sdk" -name "systemres" -type d 2>/dev/null || true
             fi
           fi
         else
