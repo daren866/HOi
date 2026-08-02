@@ -105,9 +105,13 @@ jobs:
         for url in "${SDK_URLS[@]}"; do
           TRIED_URLS="${TRIED_URLS} - ${url}"
           echo "━━━ Trying: $url ━━━"
-          HTTP_CODE=$(curl -sI "$url" -o /dev/null -w '%{http_code}' --max-time 10)
+          # 用 -L 跟随 302 重定向, 华为 CDN 会重定向到就近节点
+          HTTP_CODE=$(curl -sIL "$url" -o /dev/null -w '%{http_code}' --max-time 15)
           echo "HTTP status: $HTTP_CODE"
-          [ "$HTTP_CODE" != "200" ] && { echo "⚠️ Not available, skipping"; continue; }
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ Not available (HTTP $HTTP_CODE), skipping"
+            continue
+          fi
 
           echo "Starting download..."
           if curl -L "$url" -o arkui-x-sdk.zip --fail --max-time 1200 --retry 2 --retry-delay 5; then
