@@ -574,6 +574,9 @@ static HAPManager *_sharedInstance = nil;
 
         // 在主线程调用 StageApplication 配置 bundle 目录并启动 ArkUI 运行时,
         // 这一步会把 hap 中的 modules.abc 等 abc 字节码加载进 ArkUI-X 虚拟机并执行入口逻辑。
+        // 注意:block 内使用 moduleInfo 局部变量(在 NSOperationQueue 后台线程创建),
+        // 其生命周期和主队列 block 一样长,所以 _appObj 等字段不会被释放。
+        NSDictionary *moduleInfoCopy = moduleInfo;
         dispatch_async(dispatch_get_main_queue(), ^{
             // 整个 StageApplication 调用序列可能触发 ObjC 异常 / C++ abort。
             // 这里用最外层 @try/@catch 兜底,任何 ObjC 异常都不会让 completion 不被调用,
@@ -584,6 +587,17 @@ static HAPManager *_sharedInstance = nil;
             // installCrashGuard 内部用 g_crashGuardArmed 标志位去重,但这里加 force 参数强制重装。
             @try {
 #if HAS_ARKUI_X
+                // configModule 之前:跑一遍 postInstallSetup
+                // - 合成缺失的 AppScope/app.json (某些 SDK 版本缺失该文件会导致白屏)
+                // - 打印 resources.index/pack.info 等关键文件存在性诊断
+                // - 列出 main_pages.json 等 profile 内容,方便定位白屏原因
+                NSDictionary *appObj = moduleInfoCopy[@"_appObj"];
+                [self postInstallSetupForBundleName:bundleName
+                                         moduleName:moduleName
+                                            appName:appName
+                                   arkuiXDirectory:self.arkuiXDirectory
+                                      parsedAppObj:appObj];
+
                 // 在 configModule 之前重新安装 crash guard,防止上一次或本次 ArkUI-X 内部覆盖。
                 [self installCrashGuardForce:YES];
 
@@ -1298,6 +1312,10 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         result[@"abilityName"] = kDefaultAbilityName;
     }
 
+    // 保存原始解析对象,供 postInstallSetup 合成 AppScope/app.json 等辅助用途。
+    if (appObj) result[@"_appObj"]    = appObj;
+    if (moduleObj) result[@"_moduleObj"] = moduleObj;
+
     NSLog(@"[HAPManager] Parsed %@: bundleName=%@ moduleName=%@ abilityName=%@ appName=%@ pageName=%@",
           moduleJsonPath.lastPathComponent,
           result[@"bundleName"], result[@"moduleName"], result[@"abilityName"],
@@ -1418,6 +1436,122 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
     }
     return NO;
+}
+
+// 安装后执行:合成 AppScope/app.json(若缺失)、检查 resources.index 等关键文件、打印完整诊断。
+// 注:AppScope/app.json 是 ArkUI-X SDK 的 LaunchApplication 期望读取的应用信息文件,
+// 缺失时 SDK 可能不报错但无法正常解析 Ability 入口,导致白屏。
+- (void)postInstallSetupForBundleName:(NSString *)bundleName
+                           moduleName:(NSString *)moduleName
+                              appName:(NSString *)appName
+                     arkuiXDirectory:(NSString *)arkuiXDirectory
+                        parsedAppObj:(NSDictionary *)parsedAppObj {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *moduleDir = [arkuiXDirectory stringByAppendingPathComponent:moduleName];
+
+    // ---- 1. 关键文件存在性诊断 ----
+    NSString *resourcesIndexPath = [moduleDir stringByAppendingPathComponent:@"resources.index"];
+    NSString *packInfoPath       = [moduleDir stringByAppendingPathComponent:@"pack.info"];
+    NSString *pkgContextInfoPath = [moduleDir stringByAppendingPathComponent:@"pkgContextInfo.json"];
+    NSString *resourcesDir       = [moduleDir stringByAppendingPathComponent:@"resources"];
+
+    BOOL hasResourcesIndex = [fm fileExistsAtPath:resourcesIndexPath];
+    BOOL hasPackInfo       = [fm fileExistsAtPath:packInfoPath];
+    BOOL hasPkgContextInfo = [fm fileExistsAtPath:pkgContextInfoPath];
+    BOOL hasResourcesDir   = [fm fileExistsAtPath:resourcesDir];
+
+    NSLog(@"[HAPManager] ========== Post-Install Diagnostics ==========");
+    NSLog(@"[HAPManager] bundleName=%@ moduleName=%@ abilityName=%@", bundleName, moduleName, appName);
+    NSLog(@"[HAPManager] moduleDir=%@", moduleDir);
+    NSLog(@"[HAPManager] resources.index exists=%d path=%@", hasResourcesIndex, resourcesIndexPath);
+    NSLog(@"[HAPManager] pack.info       exists=%d path=%@", hasPackInfo, packInfoPath);
+    NSLog(@"[HAPManager] pkgContextInfo  exists=%d path=%@", hasPkgContextInfo, pkgContextInfoPath);
+    NSLog(@"[HAPManager] resources/ dir  exists=%d path=%@", hasResourcesDir, resourcesDir);
+
+    if (!hasResourcesIndex) {
+        NSLog(@"[HAPManager] ⚠️  WARNING: resources.index 缺失!");
+        NSLog(@"[HAPManager]    module.json 中 pages=\"$profile:main_pages\" 需要通过 resources.index 做资源索引,");
+        NSLog(@"[HAPManager]    没有该文件 SDK 内部 AssetResolver 无法将 $profile:main_pages 解析为 resources/base/profile/main_pages.json,");
+        NSLog(@"[HAPManager]    最终 EntryAbility 启动后找不到页面 → 白屏不渲染。");
+        NSLog(@"[HAPManager]    修复:请使用真正打包出的 .hap (运行 DevEco Build HAP / hvigor assembleHap),");
+        NSLog(@"[HAPManager]    而不是将 entry-default-unsigned/ 中间产物目录直接打包。");
+    }
+
+    // 如果 resources 目录存在但 resources.index 缺失,尝试兜底:列出 resources/base/profile/ 下有什么,
+    // 帮用户确认 main_pages.json 之类的配置文件是否在。
+    if (hasResourcesDir) {
+        NSString *profileDir = [resourcesDir stringByAppendingPathComponent:@"base/profile"];
+        NSArray *profileFiles = [fm contentsOfDirectoryAtPath:profileDir error:nil];
+        NSLog(@"[HAPManager] resources/base/profile/ files: %@", profileFiles);
+
+        // 找 main_pages 或其他 *pages*.json
+        for (NSString *f in profileFiles) {
+            if ([f.lowercaseString containsString:@"page"] || [f.pathExtension isEqualToString:@"json"]) {
+                NSString *fullPath = [profileDir stringByAppendingPathComponent:f];
+                NSData *d = [NSData dataWithContentsOfFile:fullPath];
+                if (d.length > 0 && d.length < 65536) {
+                    NSString *txt = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+                    if (txt) {
+                        NSLog(@"[HAPManager] profile %@ content:\n%@", f, txt);
+                    }
+                }
+            }
+        }
+    }
+
+    // ets 目录下 abc 文件完整列表
+    NSString *etsDir = [moduleDir stringByAppendingPathComponent:@"ets"];
+    NSDirectoryEnumerator *etsEnum = [fm enumeratorAtPath:etsDir];
+    NSMutableArray<NSString *> *abcFiles = [NSMutableArray array];
+    for (NSString *p in etsEnum) {
+        if ([p.pathExtension isEqualToString:@"abc"]) {
+            [abcFiles addObject:p];
+        }
+    }
+    NSLog(@"[HAPManager] ets/*.abc files (%lu): %@", (unsigned long)abcFiles.count, abcFiles);
+    NSLog(@"[HAPManager] =====================================================");
+
+    // ---- 2. 合成 AppScope/app.json (若缺失) ----
+    NSString *appScopeDir = [arkuiXDirectory stringByAppendingPathComponent:@"AppScope"];
+    NSString *appJsonPath = [appScopeDir stringByAppendingPathComponent:@"app.json"];
+
+    if (![fm fileExistsAtPath:appJsonPath]) {
+        [fm createDirectoryAtPath:appScopeDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        // 用解析到的 appObj 优先,兜底用传入的参数
+        NSString *finalBundleName = parsedAppObj[@"bundleName"] ?: bundleName;
+        NSString *finalVendor     = parsedAppObj[@"vendor"] ?: @"";
+        id versionNameObj         = parsedAppObj[@"versionName"];
+        id versionCodeObj         = parsedAppObj[@"versionCode"];
+        id minApiObj              = parsedAppObj[@"minAPIVersion"];
+        id targetApiObj           = parsedAppObj[@"targetAPIVersion"];
+        id iconObj                = parsedAppObj[@"icon"];
+        id labelObj               = parsedAppObj[@"label"];
+        NSString *displayName     = appName.length ? appName : (labelObj ?: finalBundleName);
+
+        NSMutableDictionary *appJson = [NSMutableDictionary dictionary];
+        NSMutableDictionary *app     = [NSMutableDictionary dictionary];
+        app[@"bundleName"]           = finalBundleName;
+        app[@"vendor"]               = finalVendor;
+        if (versionNameObj)  app[@"versionName"]  = versionNameObj;
+        if (versionCodeObj)  app[@"versionCode"]  = versionCodeObj;
+        if (minApiObj)       app[@"minAPIVersion"]  = minApiObj;
+        if (targetApiObj)    app[@"targetAPIVersion"] = targetApiObj;
+        if (iconObj)         app[@"icon"]         = iconObj;
+        if (labelObj)        app[@"label"]        = labelObj;
+        if (displayName && !labelObj) app[@"label"] = displayName;
+
+        appJson[@"app"] = app;
+
+        NSError *err = nil;
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:appJson options:NSJSONWritingPrettyPrinted error:&err];
+        if (jsonData) {
+            [fm createFileAtPath:appJsonPath contents:jsonData attributes:nil];
+            NSLog(@"[HAPManager] AppScope/app.json generated (bundle=%@ label=%@)", finalBundleName, displayName);
+        } else {
+            NSLog(@"[HAPManager] Failed to generate AppScope/app.json: %@", err);
+        }
+    }
 }
 
 // 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。
