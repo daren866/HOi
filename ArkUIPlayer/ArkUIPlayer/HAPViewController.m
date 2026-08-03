@@ -231,9 +231,12 @@
     [self.loadingIndicator startAnimating];
 
     [self.hapManager loadHAPAtPath:hapPath completion:^(BOOL success, NSString *errorMessage) {
+        NSLog(@"[HAPList] loadHAP completion: success=%d error=%@", success, errorMessage);
         [self.loadingIndicator stopAnimating];
 
         if (success) {
+            NSLog(@"[HAPList] loadHAP success, creating HAPPlayerViewController (bundle=%@ module=%@ ability=%@)",
+                  bundleName, moduleName, abilityName);
             // push 前先 pop 回根 VC,确保旧的 StageViewController 被 dealloc,
             // 否则旧的 instanceName 仍会留在 AppMain 内部表中,下一个 hap 的 DispatchOnCreate
             // 可能找不到正确的入口或者对同一个 instanceName 重复 DispatchOnCreate 崩。
@@ -299,6 +302,7 @@
                     }
                 }];
                 [self.navigationController pushViewController:playerVC animated:YES];
+                NSLog(@"[HAPList] pushViewController done, playerVC=%@", playerVC);
                 [CATransaction commit];
             } @catch (NSException *e) {
                 NSLog(@"[HAPList] ❌ pushViewController crashed: %@\n%@", e, e.callStackSymbols);
