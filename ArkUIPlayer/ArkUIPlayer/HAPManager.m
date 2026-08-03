@@ -2082,6 +2082,36 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
 
     NSLog(@"[HAPManager] ✅ systemres copied to %@ (resources.index=%d, abc files=%lu)",
           destSystemResDir, hasResIndex, (unsigned long)abcCount);
+
+    // ===== 双重 systemres 路径绕过 =====
+    // 预编译 xcframework 中 ace_container_sg.cpp 的 SetResPaths 可能存在双重拼接 bug:
+    //   sysResPath = ".../arkui-x/systemres/resources.index"
+    //   → packagePath = ".../arkui-x/systemres"  (只剥离 resources.index)
+    //   → Init 拼接: packagePath + "/systemres/resources.index"
+    //   = ".../arkui-x/systemres/systemres/resources.index"  (双重 systemres!)
+    //
+    // 由于无法修改预编译 xcframework,这里创建一个 symlink 绕过:
+    //   .../arkui-x/systemres/systemres/ → .../arkui-x/systemres/
+    // 这样无论代码拼接出哪个路径,都能找到 resources.index。
+    NSString *doubleSystemResDir = [destSystemResDir stringByAppendingPathComponent:@"systemres"];
+    NSString *doubleResIndex = [doubleSystemResDir stringByAppendingPathComponent:@"resources.index"];
+    if (![fm fileExistsAtPath:doubleResIndex]) {
+        // 创建 symlink: systemres/systemres → systemres (自引用)
+        // 用 symlink 而非 copy 避免占用双倍空间(icudt74l.dat 有 31MB)
+        if ([fm fileExistsAtPath:doubleSystemResDir]) {
+            [fm removeItemAtPath:doubleSystemResDir error:nil];
+        }
+        // 创建一个指向自身的 symlink
+        NSError *symError = nil;
+        // symlink 目标用相对路径 ".." 指向父目录(即 systemres 本身)
+        if (![fm createSymbolicLinkAtPath:doubleSystemResDir withDestinationPath:@".." error:&symError]) {
+            // symlink 失败,退而用 copy(只复制 resources.index 而非整个目录,节省空间)
+            NSLog(@"[HAPManager] symlink failed (%@), copying resources.index only", symError);
+            [fm createDirectoryAtPath:doubleSystemResDir withIntermediateDirectories:YES attributes:nil error:nil];
+            [fm copyItemAtPath:destResIndex toPath:doubleResIndex error:nil];
+        }
+        NSLog(@"[HAPManager] ✅ double-systemres workaround created at %@", doubleSystemResDir);
+    }
 }
 
 // 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。
