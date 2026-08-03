@@ -601,6 +601,14 @@ static HAPManager *_sharedInstance = nil;
                 // 在 configModule 之前重新安装 crash guard,防止上一次或本次 ArkUI-X 内部覆盖。
                 [self installCrashGuardForce:YES];
 
+                // ===== 关键修复:复制 systemres 到动态加载目录 =====
+                // systemres 包含系统 ABC 字节码(内置组件 Text/Button/Column/Row 等的实现)、
+                // 字体、ICU 数据(icudt74l.dat)、resources.index。
+                // 没有它,基础组件没有系统字节码和样式 → 白屏。
+                // build 阶段已把 SDK 的 systemres/ 拷贝到 app bundle,但 configModule
+                // 扫描的是 Documents/files/arkui-x/,所以必须先把 systemres 复制过去。
+                [self ensureSystemResourcesInArkuiXDirectory:self.arkuiXDirectory];
+
                 // StageAssetManager 的 moduleFilesWithbundleDirectory: 会把传入的 directory
                 // 拼接到 [[NSBundle mainBundle] bundlePath] 后面。如果传入绝对路径(以 / 开头),
                 // 拼接结果为 "app.app//var/mobile/..." 是无效路径,导致 all files count : 0。
@@ -1952,6 +1960,84 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             NSLog(@"[HAPManager] Failed to generate AppScope/app.json: %@", err);
         }
     }
+}
+
+// 把 app bundle 中的 systemres/ 复制到 Documents/files/arkui-x/systemres/。
+//
+// systemres 是 ArkUI-X SDK 提供的系统资源目录,包含:
+//   - abc/         系统 ABC 字节码(内置组件 Text/Button/Column/Row/List/Grid 等的实现)
+//   - resources/   系统资源(字体、图片、主题等)
+//   - resources.index  系统资源索引
+//   - icudt74l.dat ICU 国际化数据
+//
+// build 阶段(.github/workflows/build.yml)已把 SDK 的 systemres/ 拷贝到 app bundle。
+// 但 HAPManager 动态加载 HAP 时,configModuleWithBundleDirectory: 扫描的是
+// Documents/files/arkui-x/ 目录,如果 systemres 不在该目录下:
+//   1. StageAssetManager.getModuleResourcesWithModuleName: 找不到 sysResIndexPath
+//   2. StageAssetProvider::GetResIndexPath 的 fallback 也找不到 /systemres/resources.index
+//   3. ResourceAdapter 构造时 sysResIndexPath 为空 → 系统资源加载失败
+//   4. 基础组件没有系统 ABC 字节码和默认样式 → 渲染为空 → 白屏
+//
+// 因此必须在 configModule 之前把 systemres 从 app bundle 复制到动态加载目录。
+- (void)ensureSystemResourcesInArkuiXDirectory:(NSString *)arkuiXDirectory {
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 目标路径:Documents/files/arkui-x/systemres/
+    NSString *destSystemResDir = [arkuiXDirectory stringByAppendingPathComponent:@"systemres"];
+
+    // 如果目标已存在且包含 resources.index,说明之前已复制过,跳过。
+    NSString *destResIndex = [destSystemResDir stringByAppendingPathComponent:@"resources.index"];
+    if ([fm fileExistsAtPath:destResIndex]) {
+        NSLog(@"[HAPManager] systemres already exists at %@ (skipping copy)", destSystemResDir);
+        return;
+    }
+
+    // 源路径:app bundle 中的 systemres/
+    // build.yml 把 systemres 拷贝到 app bundle 根目录(与 arkui-x/ 同级或直接在 bundle 根)。
+    NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+
+    // 尝试多个可能的位置:
+    //   1. {bundlePath}/systemres/        (build.yml 直接拷贝到 bundle 根)
+    //   2. {bundlePath}/arkui-x/systemres/ (标准 ArkUI-X 工程结构)
+    NSArray *possibleSources = @[
+        [bundlePath stringByAppendingPathComponent:@"systemres"],
+        [bundlePath stringByAppendingPathComponent:@"arkui-x/systemres"],
+    ];
+
+    NSString *srcSystemResDir = nil;
+    for (NSString *candidate in possibleSources) {
+        if ([fm fileExistsAtPath:candidate]) {
+            srcSystemResDir = candidate;
+            break;
+        }
+    }
+
+    if (!srcSystemResDir) {
+        NSLog(@"[HAPManager] ⚠️ systemres not found in app bundle! Searched: %@", possibleSources);
+        return;
+    }
+
+    // 复制 systemres 到目标目录
+    if ([fm fileExistsAtPath:destSystemResDir]) {
+        [fm removeItemAtPath:destSystemResDir error:nil];
+    }
+    NSError *error = nil;
+    if (![fm copyItemAtPath:srcSystemResDir toPath:destSystemResDir error:&error]) {
+        NSLog(@"[HAPManager] ⚠️ Failed to copy systemres: %@", error);
+        return;
+    }
+
+    // 验证关键文件
+    BOOL hasResIndex = [fm fileExistsAtPath:destResIndex];
+    NSString *abcDir = [destSystemResDir stringByAppendingPathComponent:@"abc"];
+    BOOL hasAbcDir = [fm fileExistsAtPath:abcDir];
+    NSUInteger abcCount = 0;
+    if (hasAbcDir) {
+        abcCount = [[fm contentsOfDirectoryAtPath:abcDir error:nil] count];
+    }
+
+    NSLog(@"[HAPManager] ✅ systemres copied to %@ (resources.index=%d, abc files=%lu)",
+          destSystemResDir, hasResIndex, (unsigned long)abcCount);
 }
 
 // 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。
