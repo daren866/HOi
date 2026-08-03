@@ -1982,13 +1982,18 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
 - (void)ensureSystemResourcesInArkuiXDirectory:(NSString *)arkuiXDirectory {
     NSFileManager *fm = [NSFileManager defaultManager];
 
+    NSLog(@"[HAPManager] ensureSystemResources: start, arkuiXDirectory=%@", arkuiXDirectory);
+
     // 目标路径:Documents/files/arkui-x/systemres/
     NSString *destSystemResDir = [arkuiXDirectory stringByAppendingPathComponent:@"systemres"];
 
     // 如果目标已存在且包含 resources.index,说明之前已复制过,跳过。
     NSString *destResIndex = [destSystemResDir stringByAppendingPathComponent:@"resources.index"];
     if ([fm fileExistsAtPath:destResIndex]) {
-        NSLog(@"[HAPManager] systemres already exists at %@ (skipping copy)", destSystemResDir);
+        NSString *destAbcDir = [destSystemResDir stringByAppendingPathComponent:@"abc"];
+        NSUInteger destAbcCount = [[fm contentsOfDirectoryAtPath:destAbcDir error:nil] count];
+        NSLog(@"[HAPManager] systemres already exists at %@ (resources.index found, abc count=%lu, skipping copy)",
+              destSystemResDir, (unsigned long)destAbcCount);
         return;
     }
 
@@ -1999,21 +2004,48 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
     // 尝试多个可能的位置:
     //   1. {bundlePath}/systemres/        (build.yml 直接拷贝到 bundle 根)
     //   2. {bundlePath}/arkui-x/systemres/ (标准 ArkUI-X 工程结构)
-    NSArray *possibleSources = @[
+    //   3. {bundlePath}/Frameworks/*.framework/Resources/systemres/  (SDK 打包在 framework 内)
+    NSMutableArray<NSString *> *possibleSources = [NSMutableArray arrayWithArray:@[
         [bundlePath stringByAppendingPathComponent:@"systemres"],
         [bundlePath stringByAppendingPathComponent:@"arkui-x/systemres"],
-    ];
+    ]];
+    // 额外扫描 Frameworks 目录下所有 framework 内的 Resources/systemres
+    NSString *frameworksDir = [bundlePath stringByAppendingPathComponent:@"Frameworks"];
+    NSArray<NSString *> *frameworkFiles = [fm contentsOfDirectoryAtPath:frameworksDir error:nil];
+    for (NSString *fwFile in frameworkFiles) {
+        if (![fwFile hasSuffix:@".framework"]) continue;
+        NSString *fwPath = [frameworksDir stringByAppendingPathComponent:fwFile];
+        NSString *candidate = [[fwPath stringByAppendingPathComponent:@"Resources"]
+                                 stringByAppendingPathComponent:@"systemres"];
+        [possibleSources addObject:candidate];
+        [possibleSources addObject:[fwPath stringByAppendingPathComponent:@"systemres"]];
+    }
+    NSLog(@"[HAPManager] ensureSystemResources: searching bundle=%@ for systemres, candidates=%lu",
+          bundlePath, (unsigned long)possibleSources.count);
 
     NSString *srcSystemResDir = nil;
     for (NSString *candidate in possibleSources) {
-        if ([fm fileExistsAtPath:candidate]) {
-            srcSystemResDir = candidate;
-            break;
+        BOOL isDir = NO;
+        BOOL exists = [fm fileExistsAtPath:candidate isDirectory:&isDir];
+        NSLog(@"[HAPManager]   candidate %@ exists=%d isDir=%d", candidate, exists, isDir);
+        if (exists && isDir) {
+            NSString *ri = [candidate stringByAppendingPathComponent:@"resources.index"];
+            if ([fm fileExistsAtPath:ri]) {
+                srcSystemResDir = candidate;
+                NSLog(@"[HAPManager] ✅ found src systemres at %@", candidate);
+                break;
+            } else {
+                NSLog(@"[HAPManager]   ⚠️ directory exists but no resources.index inside: %@", candidate);
+            }
         }
     }
 
     if (!srcSystemResDir) {
-        NSLog(@"[HAPManager] ⚠️ systemres not found in app bundle! Searched: %@", possibleSources);
+        NSLog(@"[HAPManager] ⚠️ systemres NOT FOUND in app bundle! Searched %lu candidates.",
+              (unsigned long)possibleSources.count);
+        // 列出 bundle 顶层内容帮助诊断
+        NSArray *bundleTop = [fm contentsOfDirectoryAtPath:bundlePath error:nil];
+        NSLog(@"[HAPManager] bundle top contents: %@", bundleTop);
         return;
     }
 
