@@ -1991,6 +1991,44 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
 //   4. 基础组件没有系统 ABC 字节码和默认样式 → 渲染为空 → 白屏
 //
 // 因此必须在 configModule 之前把 systemres 从 app bundle 复制到动态加载目录。
+// 确保 double-systemres symlink workaround 存在
+// 预编译 xcframework 的 SetResPaths 可能双重拼接 systemres 路径导致找不到 resources.index
+- (void)ensureDoubleSystemResWorkaround:(NSString *)destSystemResDir {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *destResIndex = [destSystemResDir stringByAppendingPathComponent:@"resources.index"];
+
+    NSString *doubleSystemResDir = [destSystemResDir stringByAppendingPathComponent:@"systemres"];
+    NSString *doubleResIndex = [doubleSystemResDir stringByAppendingPathComponent:@"resources.index"];
+
+    // 检查 workaround 是否已存在(通过 symlink 或 copy 都算)
+    BOOL workaroundOK = [fm fileExistsAtPath:doubleResIndex];
+    BOOL destHasResIndex = [fm fileExistsAtPath:destResIndex];
+    if (!destHasResIndex) {
+        NSLog(@"[HAPManager] ⚠️ ensureDoubleSystemResWorkaround: dest resources.index not found yet, skip");
+        return;
+    }
+    if (workaroundOK) {
+        // 验证 symlink 是否有效(指向的路径能否读到 resources.index)
+        BOOL isSymlink = [[fm attributesOfItemAtPath:doubleSystemResDir error:nil]
+                          fileType] == NSFileTypeSymbolicLink;
+        NSLog(@"[HAPManager] ✅ double-systemres workaround already exists at %@ (isSymlink=%d), skip",
+              doubleSystemResDir, isSymlink);
+        return;
+    }
+
+    NSLog(@"[HAPManager] ensureDoubleSystemResWorkaround: creating symlink at %@ -> ..", doubleSystemResDir);
+    if ([fm fileExistsAtPath:doubleSystemResDir]) {
+        [fm removeItemAtPath:doubleSystemResDir error:nil];
+    }
+    NSError *symError = nil;
+    if (![fm createSymbolicLinkAtPath:doubleSystemResDir withDestinationPath:@".." error:&symError]) {
+        NSLog(@"[HAPManager] symlink failed (%@), copying resources.index only", symError);
+        [fm createDirectoryAtPath:doubleSystemResDir withIntermediateDirectories:YES attributes:nil error:nil];
+        [fm copyItemAtPath:destResIndex toPath:doubleResIndex error:nil];
+    }
+    NSLog(@"[HAPManager] ✅ double-systemres workaround created at %@", doubleSystemResDir);
+}
+
 - (void)ensureSystemResourcesInArkuiXDirectory:(NSString *)arkuiXDirectory {
     NSFileManager *fm = [NSFileManager defaultManager];
 
@@ -1999,13 +2037,15 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
     // 目标路径:Documents/files/arkui-x/systemres/
     NSString *destSystemResDir = [arkuiXDirectory stringByAppendingPathComponent:@"systemres"];
 
-    // 如果目标已存在且包含 resources.index,说明之前已复制过,跳过。
+    // 如果目标已存在且包含 resources.index,说明之前已复制过,跳过复制。
+    // 但仍然要确保 double-systemres workaround 存在(防止旧版本复制时没建 workaround)。
     NSString *destResIndex = [destSystemResDir stringByAppendingPathComponent:@"resources.index"];
     if ([fm fileExistsAtPath:destResIndex]) {
         NSString *destAbcDir = [destSystemResDir stringByAppendingPathComponent:@"abc"];
         NSUInteger destAbcCount = [[fm contentsOfDirectoryAtPath:destAbcDir error:nil] count];
         NSLog(@"[HAPManager] systemres already exists at %@ (resources.index found, abc count=%lu, skipping copy)",
               destSystemResDir, (unsigned long)destAbcCount);
+        [self ensureDoubleSystemResWorkaround:destSystemResDir];
         return;
     }
 
@@ -2083,35 +2123,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
     NSLog(@"[HAPManager] ✅ systemres copied to %@ (resources.index=%d, abc files=%lu)",
           destSystemResDir, hasResIndex, (unsigned long)abcCount);
 
-    // ===== 双重 systemres 路径绕过 =====
-    // 预编译 xcframework 中 ace_container_sg.cpp 的 SetResPaths 可能存在双重拼接 bug:
-    //   sysResPath = ".../arkui-x/systemres/resources.index"
-    //   → packagePath = ".../arkui-x/systemres"  (只剥离 resources.index)
-    //   → Init 拼接: packagePath + "/systemres/resources.index"
-    //   = ".../arkui-x/systemres/systemres/resources.index"  (双重 systemres!)
-    //
-    // 由于无法修改预编译 xcframework,这里创建一个 symlink 绕过:
-    //   .../arkui-x/systemres/systemres/ → .../arkui-x/systemres/
-    // 这样无论代码拼接出哪个路径,都能找到 resources.index。
-    NSString *doubleSystemResDir = [destSystemResDir stringByAppendingPathComponent:@"systemres"];
-    NSString *doubleResIndex = [doubleSystemResDir stringByAppendingPathComponent:@"resources.index"];
-    if (![fm fileExistsAtPath:doubleResIndex]) {
-        // 创建 symlink: systemres/systemres → systemres (自引用)
-        // 用 symlink 而非 copy 避免占用双倍空间(icudt74l.dat 有 31MB)
-        if ([fm fileExistsAtPath:doubleSystemResDir]) {
-            [fm removeItemAtPath:doubleSystemResDir error:nil];
-        }
-        // 创建一个指向自身的 symlink
-        NSError *symError = nil;
-        // symlink 目标用相对路径 ".." 指向父目录(即 systemres 本身)
-        if (![fm createSymbolicLinkAtPath:doubleSystemResDir withDestinationPath:@".." error:&symError]) {
-            // symlink 失败,退而用 copy(只复制 resources.index 而非整个目录,节省空间)
-            NSLog(@"[HAPManager] symlink failed (%@), copying resources.index only", symError);
-            [fm createDirectoryAtPath:doubleSystemResDir withIntermediateDirectories:YES attributes:nil error:nil];
-            [fm copyItemAtPath:destResIndex toPath:doubleResIndex error:nil];
-        }
-        NSLog(@"[HAPManager] ✅ double-systemres workaround created at %@", doubleSystemResDir);
-    }
+    // 复制完成后,确保双重路径 workaround 存在
+    [self ensureDoubleSystemResWorkaround:destSystemResDir];
 }
 
 // 把 hap 解压内容安置到 Documents/arkui-x/{moduleName}/ 下。

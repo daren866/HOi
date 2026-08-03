@@ -120,6 +120,90 @@
                          e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
         self.lastErrorMessage = msg;
         [self showErrorMessage:msg];
+        return;
+    }
+
+    // ===== viewDidAppear 后诊断 & 尺寸强制刷新 =====
+    // StageViewController.viewDidLoad 在 view 还没布局时就创建 windowView 并设置 frame=self.view.bounds,
+    // 此时 view.bounds 可能是 (0,0,0,0)(取决于容器什么时候约束好),导致 windowView 尺寸为 0,
+    // layoutSubviews 里的 notifySurfaceChangedWithWidth 传 0x0,渲染 surface 没初始化 → 白屏。
+    // 这里在 viewDidAppear 时(确定 view 已经有尺寸了)诊断并强制刷新布局和 frame。
+    @try {
+        UIView *rootView = self.view;
+        CGRect rootBounds = rootView.bounds;
+        CGRect rootFrame = rootView.frame;
+        NSLog(@"[HAPPlayer] 📐 viewDidAppear post-diagnose: rootView.bounds=%@ rootView.frame=%@ subviews=%lu",
+              NSStringFromCGRect(rootBounds), NSStringFromCGRect(rootFrame),
+              (unsigned long)rootView.subviews.count);
+
+        // 递归查找 WindowView / AccessibilityWindowView 并诊断
+        __block UIView *windowView = nil;
+        void (^findWindowView)(UIView *) = ^(UIView *parent) {
+            for (UIView *sub in parent.subviews) {
+                NSString *cls = NSStringFromClass([sub class]);
+                BOOL isWindowView = [cls containsString:@"WindowView"];
+                NSLog(@"[HAPPlayer]   subview: %@  frame=%@  bounds=%@",
+                      cls, NSStringFromCGRect(sub.frame), NSStringFromCGRect(sub.bounds));
+                if (isWindowView && !windowView) {
+                    windowView = sub;
+                }
+                // 递归查找(StageContainerView 会把 WindowView 包一层)
+                if (sub.subviews.count > 0) {
+                    for (UIView *ss in sub.subviews) {
+                        NSString *scls = NSStringFromClass([ss class]);
+                        BOOL isSW = [scls containsString:@"WindowView"];
+                        NSLog(@"[HAPPlayer]     sub-subview: %@  frame=%@  bounds=%@",
+                              scls, NSStringFromCGRect(ss.frame), NSStringFromCGRect(ss.bounds));
+                        if (isSW && !windowView) {
+                            windowView = ss;
+                        }
+                    }
+                }
+            }
+        };
+        findWindowView(rootView);
+
+        // 如果找到 WindowView 且 frame 为 0x0(或与 root 不一致),强制重设 + layout
+        if (windowView) {
+            BOOL sizeIsZero = (windowView.bounds.size.width <= 1 || windowView.bounds.size.height <= 1);
+            BOOL mismatch = (fabs(windowView.bounds.size.width - rootBounds.size.width) > 1 ||
+                             fabs(windowView.bounds.size.height - rootBounds.size.height) > 1);
+            if (sizeIsZero || mismatch) {
+                NSLog(@"[HAPPlayer] 🔧 Fixing windowView size: was %@ -> applying rootBounds %@",
+                      NSStringFromCGRect(windowView.bounds), NSStringFromCGRect(rootBounds));
+                // 1) 重设 frame(autoresizingMask 在 StageVC 里已经设置了)
+                windowView.frame = rootBounds;
+                // 2) 强制 setNeedsLayout + layoutIfNeeded → 触发 WindowView.layoutSubviews
+                //    → notifySurfaceChangedWithWidth 会以正确尺寸通知 native 创建渲染 surface
+                [windowView setNeedsLayout];
+                [rootView setNeedsLayout];
+                [windowView layoutIfNeeded];
+                [rootView layoutIfNeeded];
+                NSLog(@"[HAPPlayer] ✅ After fix: windowView.frame=%@ bounds=%@",
+                      NSStringFromCGRect(windowView.frame), NSStringFromCGRect(windowView.bounds));
+
+                // 3) 如果 ArkUI 运行着,额外触发一次 foreground (有些 ArkUI-X 版本需要前台通知才会
+                //    真正绑定 surface 并启动渲染循环)
+                if (self.hapManager.isArkUIRunning) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                                   dispatch_get_main_queue(), ^{
+                        @try {
+                            NSLog(@"[HAPPlayer] 🔄 Post-fix: re-dispatching OnForeground to ability");
+                            [self.hapManager callCurrentAbilityOnForeground];
+                        } @catch (NSException *ex) {
+                            NSLog(@"[HAPPlayer] ⚠️ Post-fix onForeground non-fatal: %@", ex);
+                        }
+                    });
+                }
+            } else {
+                NSLog(@"[HAPPlayer] ✅ windowView size already correct: %@",
+                      NSStringFromCGRect(windowView.bounds));
+            }
+        } else {
+            NSLog(@"[HAPPlayer] ⚠️ Could not find WindowView in view hierarchy after viewDidAppear");
+        }
+    } @catch (NSException *diagEx) {
+        NSLog(@"[HAPPlayer] ⚠️ Post-diagnose non-fatal exception: %@", diagEx);
     }
 }
 
