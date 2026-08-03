@@ -1599,9 +1599,9 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             const char *v2Keywords[] = {
                 "ComponentV2", "ObservedV2", "TraceV2", "MonitorV2",
                 "MakeObserved", "Repeat", "Provider", "Consumer",
-                nullptr
+                NULL
             };
-            for (int ki = 0; v2Keywords[ki] != nullptr; ki++) {
+            for (int ki = 0; v2Keywords[ki] != NULL; ki++) {
                 size_t klen = strlen(v2Keywords[ki]);
                 for (NSUInteger si = 0; si + klen <= len; si++) {
                     if (memcmp(bytes + si, v2Keywords[ki], klen) == 0) {
