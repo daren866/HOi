@@ -656,6 +656,8 @@ void AceContainerSG::SetView(
 void AceContainerSG::AttachView(
     std::unique_ptr<Window> window, AceView* view, double density, int32_t width, int32_t height, uint32_t windowId)
 {
+    LOGI("AttachView start instanceId=%{public}d type=%{public}d isSubContainer=%{public}d",
+         view ? view->GetInstanceId() : -1, static_cast<int>(type_), isSubContainer_ ? 1 : 0);
     aceView_ = view;
     auto instanceId = aceView_->GetInstanceId();
 #ifdef ENABLE_ROSEN_BACKEND
@@ -695,7 +697,9 @@ void AceContainerSG::AttachView(
     aceViewSG->SetPlatformResRegister(resResgister);
     resRegister_ = aceView_->GetPlatformResRegister();
 
+    LOGI("AttachView: calling InitPiplineContext");
     InitPiplineContext(std::move(window), density, width, height, windowId);
+    LOGI("AttachView: InitPiplineContext done, pipelineContext=%{public}d", pipelineContext_ ? 1 : 0);
     if (resRegister_) {
         resRegister_->SetPipelineContext(pipelineContext_);
     }
@@ -703,8 +707,11 @@ void AceContainerSG::AttachView(
     InitializeCallback();
     InitializeEventHandler();
     SetGetViewScaleCallback();
+    LOGI("AttachView: calling InitThemeManager");
     InitThemeManager();
+    LOGI("AttachView: calling SetupRootElement");
     SetupRootElement();
+    LOGI("AttachView: SetupRootElement done");
 
     auto accessibilityEventCallback = [weak = WeakClaim(this)](uint32_t eventId, int64_t parameter) {
         auto container = weak.Upgrade();
@@ -1232,17 +1239,26 @@ RefPtr<AceContainerSG> AceContainerSG::GetContainer(int32_t instanceId)
 bool AceContainerSG::RunPage(
     int32_t instanceId, int32_t pageId, const std::string& content, const std::string& params, bool isNamedRouter)
 {
+    LOGI("RunPage start instanceId=%{public}d pageId=%{public}d content=[%{private}s] isNamedRouter=%{public}d",
+         instanceId, pageId, content.c_str(), isNamedRouter ? 1 : 0);
     auto container = AceEngine::Get().GetContainer(instanceId);
-    CHECK_NULL_RETURN(container, false);
+    if (!container) {
+        LOGE("RunPage FAILED: container is null for instanceId=%{public}d", instanceId);
+        return false;
+    }
     ContainerScope scope(instanceId);
     auto front = container->GetFrontend();
-    CHECK_NULL_RETURN(front, false);
-    LOGI("RunPage content=[%{private}s]", content.c_str());
+    if (!front) {
+        LOGE("RunPage FAILED: frontend is null for instanceId=%{public}d", instanceId);
+        return false;
+    }
+    LOGI("RunPage frontend OK, calling frontend->RunPage");
     if (isNamedRouter) {
         front->RunPageByNamedRouter(content, params);
     } else {
         front->RunPage(content, params);
     }
+    LOGI("RunPage completed OK");
     return true;
 }
 
