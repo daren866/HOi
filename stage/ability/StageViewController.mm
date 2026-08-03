@@ -229,15 +229,24 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
     _stageContainerView.notifyDelegate = self;
     self.view.backgroundColor = UIColor.whiteColor;
     LOGI("StageVC viewDidLoad call.instanceName: %{public}s", [self.instanceName UTF8String]);
+    LOGI("StageVC step1: initColorMode");
     [self initColorMode];
+    LOGI("StageVC step2: initWindowView");
     [self initWindowView];
+    LOGI("StageVC step3: initPlatformPlugin");
     [self initPlatformPlugin];
+    LOGI("StageVC step4: initArkUIXPlugin");
     [self initArkUIXPlugin];
+    LOGI("StageVC step5: createSurfaceNode");
     [_windowView createSurfaceNode];
+    LOGI("StageVC step6: createSurfaceNode done, calling DispatchOnCreate");
 
     std::string paramsString = [self getCPPString:self.params.length ? self.params : @""];
+    LOGI("StageVC step7: DispatchOnCreate instanceName=%{public}s params=%{public}s", _cInstanceName.c_str(), paramsString.c_str());
     AppMain::GetInstance()->DispatchOnCreate(_cInstanceName, paramsString);
+    LOGI("StageVC step8: DispatchOnCreate returned OK, calling DispatchOnForeground");
     AppMain::GetInstance()->DispatchOnForeground(_cInstanceName);
+    LOGI("StageVC step9: DispatchOnForeground returned OK, viewDidLoad complete");
 }
 
 - (void)saveDumpFile:(NSArray<NSString *> *)dumpParams {

@@ -263,13 +263,22 @@ void UIContentImpl::InitializeByName(OHOS::Rosen::Window* window, const std::str
 
 void UIContentImpl::InitializeInner(OHOS::Rosen::Window* window, const std::string& url, napi_value storage, bool isNamedRouter)
 {
+    LOGI("InitializeInner url=%{public}s isNamedRouter=%{public}d", url.c_str(), isNamedRouter ? 1 : 0);
     if (window) {
         CommonInitialize(window, url, storage);
+    } else {
+        LOGE("InitializeInner: window is null!");
     }
-    LOGI("InitializeInner startUrl = %{public}s", startUrl_.c_str());
+    LOGI("InitializeInner startUrl = %{public}s instanceId=%{public}d", startUrl_.c_str(), instanceId_);
 
+    auto container = Platform::AceContainerSG::GetContainer(instanceId_);
+    if (!container) {
+        LOGE("InitializeInner FAILED: container is null for instanceId=%{public}d", instanceId_);
+        return;
+    }
+    LOGI("InitializeInner: container OK, calling RunPage");
     Platform::AceContainerSG::RunPage(
-        instanceId_, Platform::AceContainerSG::GetContainer(instanceId_)->GeneratePageId(), startUrl_, "", isNamedRouter);
+        instanceId_, container->GeneratePageId(), startUrl_, "", isNamedRouter);
     LOGI("InitializeInner RunPage UIContentImpl done.");
 }
 
@@ -309,6 +318,7 @@ void UpdateFontScale(RefPtr<Platform::AceContainerSG> container,
 void UIContentImpl::CommonInitialize(OHOS::Rosen::Window* window, const std::string& url, napi_value storage)
 {
     ACE_FUNCTION_TRACE();
+    LOGI("UIContentImpl::CommonInitialize startUrl=%{public}s", url.c_str());
     window_ = sptr<OHOS::Rosen::Window>(window);
     startUrl_ = url;
     CHECK_NULL_VOID(window_);
@@ -339,10 +349,11 @@ void UIContentImpl::CommonInitialize(OHOS::Rosen::Window* window, const std::str
     auto appInfo = context->GetApplicationInfo();
     auto bundleName = info != nullptr ? info->bundleName : "";
     std::string pageProfile;
-    LOGI("Initialize UIContent isModelJson:%{public}s", isModelJson ? "true" : "false");
+    LOGI("Initialize UIContent isModelJson:%{public}s moduleName:%{public}s bundleName:%{public}s",
+         isModelJson ? "true" : "false", moduleName.c_str(), bundleName.c_str());
     if (isModelJson) {
         std::string hapPath = context->GetBundleCodeDir() + "/" + moduleName + "/";
-        LOGI("hapPath:%{public}s", hapPath.c_str());
+        LOGI("hapPath:%{public}s bundleCodeDir:%{public}s", hapPath.c_str(), context->GetBundleCodeDir().c_str());
         // first use hap provider
         if (assetManagerImpl && !hapPath.empty()) {
             auto assetProvider = AbilityRuntime::Platform::StageAssetProvider::GetInstance();
@@ -350,6 +361,8 @@ void UIContentImpl::CommonInitialize(OHOS::Rosen::Window* window, const std::str
             auto dynamicLoadFlag = true;
             std::string moduleNameMark = "/" + moduleName + "/";
             auto allFilePath = assetProvider->GetAllFilePath();
+            LOGI("allFilePath count=%{public}zu, searching for moduleNameMark=%{public}s",
+                 allFilePath.size(), moduleNameMark.c_str());
             for (auto& path : allFilePath) {
                 if (path.find(moduleNameMark) != std::string::npos) {
                     dynamicLoadFlag = false;
@@ -358,6 +371,9 @@ void UIContentImpl::CommonInitialize(OHOS::Rosen::Window* window, const std::str
             }
             if (dynamicLoadFlag) {
                 hapPath = assetProvider->GetAppDataModuleDir() + "/" + moduleName + "/";
+                LOGI("dynamicLoadFlag=true, using fallback hapPath:%{public}s", hapPath.c_str());
+            } else {
+                LOGI("dynamicLoadFlag=false, module found in allFilePath");
             }
 
             auto assetBasePathStr = { std::string(""), std::string("ets/"), std::string("ets/share"),
