@@ -361,6 +361,8 @@ void StageAssetProvider::GetResIndexPath(const std::string& moduleName,
         }
         staticResCache[moduleName] = {appResIndexPath, sysResIndexPath};
     }
+    LOGI("GetResIndexPath: module=%{public}s appResIndexPath=%{public}s sysResIndexPath=%{public}s",
+         moduleName.c_str(), appResIndexPath.c_str(), sysResIndexPath.c_str());
 }
 
 std::vector<uint8_t> StageAssetProvider::GetModuleAbilityBuffer (

@@ -138,6 +138,8 @@ void ResourceAdapterImpl::Init(const ResourceInfo& resourceInfo)
     std::string packagePath = resourceInfo.GetPackagePath();
     std::string sysResIndexPath = packagePath + DELIMITER + "systemres" + DELIMITER + "resources.index";
     sysResIndexPath_ = sysResIndexPath;
+    LOGI("ResourceAdapterImpl::Init packagePath=%{public}s sysResIndexPath=%{public}s", packagePath.c_str(),
+         sysResIndexPath.c_str());
     auto resConfig = ConvertConfigToGlobal(resourceInfo.GetResourceConfiguration());
     resConfig_ = resConfig;
     auto hapPath = resourceInfo.GetHapPath();
