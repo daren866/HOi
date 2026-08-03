@@ -1253,8 +1253,19 @@ void AceContainerSG::SetResPaths(
     resourceInfo_.SetHapPath(std::accumulate(hapResPath.begin(), hapResPath.end(), std::string(),
         [](const std::string& acc, const std::string& element) { return acc + (acc.empty() ? "" : ":") + element; }));
     // use package path to load system resource.
+    // sysResPath 形如 ".../arkui-x/systemres/resources.index"
+    // 需要剥离 "resources.index" 和 "systemres" 两层,使 packagePath = ".../arkui-x/"
+    // 因为 ResourceAdapterImpl::Init 会拼接 packagePath + "/systemres/resources.index"
+    // 如果只剥离一层,packagePath = ".../arkui-x/systemres",
+    // 拼接后变成 ".../arkui-x/systemres/systemres/resources.index" (双重 systemres) → 找不到文件
     auto sysFisrtPos = sysResPath.find_last_of('/');
     auto sysResourcePath = sysResPath.substr(0, sysFisrtPos);
+    // 如果最后一段是 "systemres",再剥离一层
+    auto lastSlash = sysResourcePath.find_last_of('/');
+    if (lastSlash != std::string::npos &&
+        sysResourcePath.substr(lastSlash + 1) == "systemres") {
+        sysResourcePath = sysResourcePath.substr(0, lastSlash);
+    }
     resourceInfo_.SetPackagePath(sysResourcePath);
 
     auto themeId = colorMode == ColorMode::LIGHT ? THEME_ID_LIGHT : THEME_ID_DARK;
