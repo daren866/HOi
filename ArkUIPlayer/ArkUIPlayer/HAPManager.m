@@ -696,6 +696,7 @@ static HAPManager *_sharedInstance = nil;
 #else
                 NSLog(@"[HAPManager] HAS_ARKUI_X disabled, abc bytecode cannot be executed.");
 #endif
+                NSLog(@"[HAPManager] ===== loadHAP SUCCESS, calling completion(YES) =====");
                 completion(YES, nil);
             } @catch (NSException *e) {
                 NSLog(@"[HAPManager] ❌ loadHAP main-queue block crashed: %@\n%@", e, e.callStackSymbols);
@@ -1861,7 +1862,16 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 if (d.length > 0 && d.length < 65536) {
                     NSString *txt = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
                     if (txt) {
-                        NSLog(@"[HAPManager] profile %@ content:\n%@", f, txt);
+                        // 精简输出:router_map.json 可能非常长(几十个路由项),
+                        // 完整打印会淹没后续关键日志(ensureSystemResources/configModule/completion)。
+                        // 只打印前 300 字符 + 总长度。
+                        if ([f containsString:@"router_map"]) {
+                            NSLog(@"[HAPManager] profile %@ content (length=%lu, first 300 chars): %@...",
+                                  f, (unsigned long)txt.length,
+                                  [txt substringToIndex:MIN(300, txt.length)]);
+                        } else {
+                            NSLog(@"[HAPManager] profile %@ content:\n%@", f, txt);
+                        }
                     }
                 }
             }
@@ -1960,6 +1970,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             NSLog(@"[HAPManager] Failed to generate AppScope/app.json: %@", err);
         }
     }
+
+    NSLog(@"[HAPManager] ===== postInstallSetup DONE =====");
 }
 
 // 把 app bundle 中的 systemres/ 复制到 Documents/files/arkui-x/systemres/。
