@@ -14,6 +14,7 @@
 #import <mach/mach.h>
 #import <objc/runtime.h>
 #import <zlib.h>
+#import <ctype.h>
 
 // ArkUI-X 运行时内部通过 getApplicationTopViewController 获取导航栈顶 VC,
 // 然后异步调用 instanceName。当栈顶是非 StageViewController(如 HAPViewController、
@@ -1583,11 +1584,41 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
         }
         NSLog(@"[HAPManager] Shim: scanning %lu abc files for imports", (unsigned long)abcPaths.count);
 
+        // V2/Repeat 检测:扫描 ABC 中的 State Management V2 关键字
+        // ArkUI-X iOS SDK 可能不支持 @ComponentV2 / @ObservedV2 / Repeat 等 API 12+ 特性
+        NSMutableArray<NSString *> *v2Warnings = [NSMutableArray array];
+
         for (NSString *abcPath in abcPaths) {
             NSData *abcData = [NSData dataWithContentsOfFile:abcPath options:0 error:nil];
             if (abcData.length < 16) { continue; }
             const unsigned char *bytes = (const unsigned char *)abcData.bytes;
             const NSUInteger len = abcData.length;
+
+            // ---- V2/Repeat 检测 ----
+            // 在 ABC 明文字符串中搜索 V2 相关关键字
+            const char *v2Keywords[] = {
+                "ComponentV2", "ObservedV2", "TraceV2", "MonitorV2",
+                "MakeObserved", "Repeat", "Provider", "Consumer",
+                nullptr
+            };
+            for (int ki = 0; v2Keywords[ki] != nullptr; ki++) {
+                size_t klen = strlen(v2Keywords[ki]);
+                for (NSUInteger si = 0; si + klen <= len; si++) {
+                    if (memcmp(bytes + si, v2Keywords[ki], klen) == 0) {
+                        // 确认前后不是字母/数字(避免子串匹配如 "Repeatable")
+                        BOOL leftOK = (si == 0) || !(isalnum(bytes[si-1]) || bytes[si-1] == '_');
+                        BOOL rightOK = (si + klen >= len) || !(isalnum(bytes[si+klen]) || bytes[si+klen] == '_');
+                        if (leftOK && rightOK) {
+                            NSString *kw = [NSString stringWithUTF8String:v2Keywords[ki]];
+                            NSString *warning = [NSString stringWithFormat:@"%@ found in %@", kw, abcPath.lastPathComponent];
+                            if (![v2Warnings containsObject:warning]) {
+                                [v2Warnings addObject:warning];
+                            }
+                            break; // 每个关键字每个文件只记一次
+                        }
+                    }
+                }
+            }
             // 滑动窗口扫字符串: 在 PANDA 文件中, 字符串是 \0 结尾的 UTF-8。
             // 我们需要提取形如 "@hms:hds.hdsBaseComponent"、"@ohos:xxx" 的模块名,
             // 以及紧跟在这些模块 import 记录中的绑定名 (HdsNavigation 等标识符)。
@@ -1619,14 +1650,17 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     continue;
                 }
 
-                // ===== 核心策略修改 (2026-08-02 白屏修复) =====
-                // 之前:白名单跳过某些 @ohos:* 模块 → 大量原生模块被遗漏,生成 shim 覆盖正确实现 → 白屏。
-                // 现在:默认拒绝(黑名单允许)模式:
-                //   - @ohos:* 和 @kit.* → 默认全部跳过(ArkUI-X iOS SDK 已内置这些 NAPI 模块)
-                //   - @hms:* → 允许(这些是 HarmonyOS 端 HMS 生态专有,iOS 端 SDK 没提供)
-                //   - 其他命名空间模块 → 允许(如 @arkui-x:xxx 第三方跨平台模块)
-                // 这样只有确确实实在 iOS 端不存在的 HarmonyOS 专有模块才会生成 shim,
-                // 绝不触碰 ArkUI-X SDK 已经注册过的 @ohos:* / @kit.* 核心模块。
+                // ===== 核心策略 (2026-08-03 组件库渲染修复) =====
+                // 默认拒绝(白名单允许)模式:
+                //   - @hms:* → 允许(HMS 生态专有,iOS 端 SDK 没有)
+                //   - @kit.* → 默认跳过(标准 kit,SDK 已内置),白名单内的 HMS 专有 kit 除外
+                //   - @ohos:* → 默认跳过(SDK 已内置),例外清单中的才允许
+                //   - 其他命名空间模块 → 允许(第三方跨平台模块兜底)
+                //
+                // 关键修复:组件库 (HarmonyOSComponentUXExamples) 使用 @kit.UIDesignKit 导入
+                // HdsNavigation 等 HMS 设计系统组件。@kit.UIDesignKit 是 HMS 专有 kit,
+                // iOS 端 SDK 没有,必须生成 shim,否则 import HdsNavigation 会抛 SyntaxError
+                // → 整个页面白屏。helloworld 不使用此类 kit,所以能正常渲染。
                 BOOL isHmsMod    = [s hasPrefix:@"@hms:"];
                 BOOL isOhosMod   = [s hasPrefix:@"@ohos:"];
                 BOOL isKitModNS  = [s hasPrefix:@"@kit."];
@@ -1634,9 +1668,32 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 if (isHmsMod) {
                     // HMS 生态专有模块(HDS 设计系统、系统分享等):iOS 端肯定没实现,允许生成 shim。
                     allowShim = YES;
-                } else if (isOhosMod || isKitModNS) {
-                    // @ohos:* / @kit.*: **默认全部跳过**。
-                    // ArkUI-X iOS SDK 的 NAPI 层(libarkui_ios.xcframework 内嵌的 so)已经注册了这些模块,
+                } else if (isKitModNS) {
+                    // @kit.*: HarmonyOS API 12+ kit 命名空间。
+                    // 大部分 kit(@kit.ArkUI / @kit.AbilityKit / @kit.ArkTS 等)SDK 已内置,跳过。
+                    // 但 HMS 专有 kit (如 @kit.UIDesignKit 提供 HdsNavigation 等 HDS 组件)
+                    // iOS 端没有,必须生成 shim。
+                    static NSArray<NSString *> *kitAllowlist = nil;
+                    static dispatch_once_t onceTok;
+                    dispatch_once(&onceTok, ^{
+                        kitAllowlist = @[
+                            // HMS 设计系统 kit:提供 HdsNavigation / HdsTabs / HdsButton 等组件
+                            @"@kit.UIDesignKit",
+                            // 系统分享 kit:HarmonyOS 专有,iOS 端无对应实现
+                            @"@kit.ShareKit",
+                        ];
+                    });
+                    for (NSString *pref in kitAllowlist) {
+                        if ([s hasPrefix:pref]) { allowShim = YES; break; }
+                    }
+                    if (!allowShim) {
+                        NSLog(@"[HAPManager] Shim: @kit.* found in ABC (skipped, assuming SDK native): %@", s);
+                        continue;
+                    } else {
+                        NSLog(@"[HAPManager] Shim: @kit.* allowlisted (HMS proprietary, needs shim): %@", s);
+                    }
+                } else if (isOhosMod) {
+                    // @ohos:*: ArkUI-X iOS SDK 的 NAPI 层(libarkui_ios.xcframework 内嵌的 so)已经注册了这些模块,
                     // 哪怕某些 API 具体函数未实现,ModuleResolver 也能找到 native module,
                     // 一旦我们写本地 shim 放到 ets/modules/ 下反而会覆盖它,
                     // 导致原本能工作的导出(比如 @ohos:arkui.node 的 NodeController 类)变成空 class → 组件不渲染 → 白屏。
@@ -1644,8 +1701,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     // 例外清单:极少数 @ohos 下确确实实 iOS 端完全缺失、且 SDK 端计划外的模块才列在这里,
                     // 但本着"不覆盖原生"的安全第一原则,目前例外清单暂时为空。
                     static NSArray<NSString *> *ohosAllowlist = nil;
-                    static dispatch_once_t onceTok;
-                    dispatch_once(&onceTok, ^{
+                    static dispatch_once_t onceTok2;
+                    dispatch_once(&onceTok2, ^{
                         ohosAllowlist = @[
                             // 例: @"@ohos:some.module.truly.missing.on.ios",
                         ];
@@ -1654,7 +1711,6 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                         if ([s hasPrefix:pref]) { allowShim = YES; break; }
                     }
                     if (!allowShim) {
-                        // 默认:跳过 @ohos:* / @kit.*
                         continue;
                     }
                 } else {
@@ -1713,16 +1769,24 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 // 注意:只有 @hms:* 等经过 allowShim 筛选的模块才会进入到这里,
                 // @ohos:arkui.node 等原生模块已在上方过滤逻辑中跳过,不会再生成 shim。
                 if ([s containsString:@"hds"] || [s containsString:@"UIDesignKit"] || [s containsString:@"DesignKit"]) {
+                    // 完整 HDS 组件清单(从 HarmonyOSComponentUXExamples 源码采集)
                     NSArray<NSString *> *knownHds = @[
-                        @"HdsNavigation", @"HdsNavigationBar", @"HdsTabs", @"HdsButton",
-                        @"HdsTextField", @"HdsText", @"HdsIcon", @"HdsSearchBar",
-                        @"HdsList", @"HdsListItem", @"HdsDialog", @"HdsSheet",
-                        @"HdsCard", @"HdsTag", @"HdsBadge", @"HdsAvatar",
+                        // 容器/导航类 (必须带 @BuilderParam 渲染子内容)
+                        @"HdsNavigation", @"HdsNavigationBar", @"HdsNavDestination",
+                        @"HdsTabs", @"HdsTabBar", @"HdsActionBar",
+                        @"HdsList", @"HdsListItem", @"HdsListItemCard",
+                        @"HdsDialog", @"HdsSheet", @"HdsCard",
+                        @"HdsGrid", @"HdsGridItem", @"HdsWaterFlow",
+                        // 叶子组件
+                        @"HdsButton", @"HdsTextField", @"HdsText", @"HdsIcon",
+                        @"HdsSearchBar", @"HdsTag", @"HdsBadge", @"HdsAvatar",
                         @"HdsProgress", @"HdsSlider", @"HdsSwitch", @"HdsStepper",
                         @"HdsCheckbox", @"HdsRadio", @"HdsPicker", @"HdsDatePicker",
                         @"HdsTimePicker", @"HdsNavBar", @"HdsToolbar", @"HdsSwiper",
-                        @"HdsGrid", @"HdsGridItem", @"HdsWaterFlow", @"HdsIndexer",
-                        @"HdsDivider", @"HdsImage", @"HdsTextArea", @"HdsSearch",
+                        @"HdsIndexer", @"HdsDivider", @"HdsImage", @"HdsTextArea",
+                        @"HdsSearch",
+                        // 控制器类(由 *Controller 后缀分支处理为 class,这里列出兜底)
+                        @"HdsTabsController",
                     ];
                     for (NSString *k in knownHds) {
                         [moduleToImports[s] addObject:k];
@@ -1738,8 +1802,27 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                   (unsigned long)moduleToImports.count);
         }
 
+        // ---- V2/Repeat 检测警告 ----
+        if (v2Warnings.count > 0) {
+            NSLog(@"[HAPManager] ⚠️⚠️⚠️ State Management V2 / Repeat API detected in ABC bytecode!");
+            NSLog(@"[HAPManager] ⚠️ Detected: %@", v2Warnings);
+            NSLog(@"[HAPManager] ⚠️ ArkUI-X iOS SDK (API 24 / bytecode 12.x) 理论上支持 V2 特性,");
+            NSLog(@"[HAPManager] ⚠️ 但若页面仍白屏,可能是 V2 运行时存在缺陷或 @kit.* 模块解析失败。");
+            NSLog(@"[HAPManager] ⚠️ 请优先检查上方 Shim 日志中 @kit.UIDesignKit 是否已生成 shim,");
+            NSLog(@"[HAPManager] ⚠️ 以及是否有其他 SyntaxError 提示模块导入失败。");
+        } else {
+            NSLog(@"[HAPManager] Shim: no V2/Repeat keywords detected in ABC");
+        }
+
         // 生成 shim 文件
         NSString *shimRoot = [etsDir stringByAppendingPathComponent:@"modules"];
+
+        // 清理旧的 shim 目录(避免上次生成的旧格式 shim 残留)
+        if ([fm fileExistsAtPath:shimRoot]) {
+            [fm removeItemAtPath:shimRoot error:nil];
+            NSLog(@"[HAPManager] Shim: cleaned old shim directory %@", shimRoot);
+        }
+
         for (NSString *modSpec in moduleToImports.allKeys) {
             NSSet<NSString *> *imports = moduleToImports[modSpec];
             if (imports.count == 0) { continue; }
@@ -1782,14 +1865,20 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             [content appendString:@"// Auto-generated compatibility shim by HAPManager.\n"];
             [content appendFormat:@"// Module: %@\n", modSpec];
             [content appendString:@"// NOTE: HDS/HarmonyOS-only components are not available on iOS;\n"];
-            [content appendString:@"// this shim provides empty export placeholders so that ES module\n"];
-            [content appendString:@"// static import validation passes. Components render as empty views\n"];
-            [content appendString:@"// and will not crash the app.\n\n"];
+            [content appendString:@"// this shim provides @Component struct placeholders so that ES module\n"];
+            [content appendString:@"// static import validation passes. HDS container components render\n"];
+            [content appendString:@"// their children through @BuilderParam pass-through.\n\n"];
+
+            // 判断是否是 HDS 模块
+            BOOL isHdsModule = [modSpec containsString:@"hds"] ||
+                               [modSpec containsString:@"UIDesignKit"] ||
+                               [modSpec containsString:@"DesignKit"];
+
             for (NSString *name in imports) {
                 // 为每个 import 名生成占位。优先按命名约定判断。
                 unichar first = [name characterAtIndex:0];
                 if (first >= 'A' && first <= 'Z') {
-                    // 大写开头 → class / enum / const
+                    // 大写开头 → class / enum / const / struct
                     if ([name hasSuffix:@"Controller"] ||
                         [name isEqualToString:@"Node"] ||
                         [name isEqualToString:@"BuilderNode"] ||
@@ -1798,8 +1887,13 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                         // class 导出 (可 new 的控制器类)
                         [content appendFormat:@"export class %@ { constructor() {} }\n", name];
                     } else if ([name hasSuffix:@"Type"] ||
+                               [name hasSuffix:@"Mode"] ||      // DividerMode, HdsNavDestinationTitleMode
+                               [name hasSuffix:@"Style"] ||     // ActionBarStyle, HdsTitleBarContentStyle
+                               [name hasSuffix:@"Options"] ||   // PaddingOptions, TitleBarStyleOptions
                                [name isEqualToString:@"NodeRenderType"]) {
-                        // enum 导出 → 对象字面量
+                        // enum / 类型 → 冻结对象 (允许 X.MEMBER 访问,值为 undefined)
+                        // ArkTS 编译器通常会把 enum 成员内联为常量,运行时不需要真实值,
+                        // 但 ModuleResolver 需要导出名存在,否则 import 校验失败。
                         [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
                     } else if ([name hasSuffix:@"Builder"]) {
                         // Builder 函数 (如 TitleBuilder, WebSheetBuilder)
@@ -1812,20 +1906,59 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                                [name hasSuffix:@"Params"]) {
                         // 常量对象/工具类 → 冻结对象
                         [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
+                    } else if (isHdsModule && [name hasPrefix:@"Hds"]) {
+                        // ===== HDS 组件:使用 @Component struct + @BuilderParam =====
+                        // 之前的空 class build() {} 不会渲染任何子内容,导致整个页面白屏。
+                        // 改用 @Component struct,@BuilderParam 接收父组件传入的子内容,
+                        // build() 中用 Column() 包裹并调用 this.content() 渲染子组件。
+                        // 这样即使 HdsNavigation 本身是空壳,其内部的 List/Text 等子组件仍能渲染。
+                        //
+                        // 注意:如果 SDK 编译器不支持 @Component 语法,shim 编译会失败,
+                        // ModuleResolver 会回退到 NAPI(不存在),抛 SyntaxError。
+                        // 这种情况下需要回退到空 class 方案。
+                        [content appendFormat:
+                            @"\n@Component\n"
+                            @"export struct %@ {{\n"
+                            @"    @BuilderParam content: () => void;\n"
+                            @"    build() {{\n"
+                            @"        Column() {{\n"
+                            @"            if (this.content) {{\n"
+                            @"                this.content()\n"
+                            @"            }}\n"
+                            @"        }}\n"
+                            @"    }}\n"
+                            @"}}\n\n", name];
                     } else if ([name hasSuffix:@"View"] || [name hasPrefix:@"Sub"]) {
-                        // 视图组件 (SubTitleView 等)
-                        [content appendFormat:@"export class %@ extends Object {{ constructor() {{ super(); }} build() {{}} }}\n", name];
+                        // 视图组件 (SubTitleView 等) — 也用 @Component struct
+                        [content appendFormat:
+                            @"\n@Component\n"
+                            @"export struct %@ {{\n"
+                            @"    @BuilderParam content: () => void;\n"
+                            @"    build() {{\n"
+                            @"        Column() {{\n"
+                            @"            if (this.content) {{\n"
+                            @"                this.content()\n"
+                            @"            }}\n"
+                            @"        }}\n"
+                            @"    }}\n"
+                            @"}}\n\n", name];
                     } else {
-                        // UI 组件 (HdsNavigation/HdsTabs/...) 导出空 class (会被当成自定义组件渲染成空)
-                        [content appendFormat:@"export class %@ {{ constructor() {{}} build() {{}} }}\n", name];
+                        // 其他 UI 组件 — 使用 @Component struct (无 @BuilderParam,叶节点组件)
+                        [content appendFormat:
+                            @"\n@Component\n"
+                            @"export struct %@ {{\n"
+                            @"    build() {{\n"
+                            @"        Column() {{}}\n"
+                            @"    }}\n"
+                            @"}}\n\n", name];
                     }
                 } else {
-                    // 小写开头 → 函数或常量
-                    if ([name isEqualToString:@"NoMore"]) {
-                        [content appendFormat:@"export const %@ = null;\n", name];
-                    } else {
-                        [content appendFormat:@"export const %@ = function() {{}}; // eslint-disable-line\n", name];
-                    }
+                    // 小写开头 → 命名空间/函数/常量 → 冻结对象
+                    // 例如 systemShare (from @kit.ShareKit) 是命名空间,
+                    // 代码会访问 systemShare.SharedData / systemShare.SelectionMode 等。
+                    // 用 Object.freeze({}) 让 X.member 访问返回 undefined 而不崩溃,
+                    // 同时满足 ES module 静态 import 校验。
+                    [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
                 }
             }
             // 总是额外导出 default 兜底
@@ -1834,9 +1967,10 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             NSError *wrErr = nil;
             BOOL ok = [content writeToFile:shimPath atomically:YES
                                     encoding:NSUTF8StringEncoding error:&wrErr];
-            NSLog(@"[HAPManager] Shim: %@ → %@ (%lu exports) %@",
-                  modSpec, shimPath, (unsigned long)imports.count,
-                  ok ? @"✅ written" : [NSString stringWithFormat:@"❌ %@", wrErr]);
+            NSArray<NSString *> *sortedImports = [imports.allObjects sortedArrayUsingSelector:@selector(compare:)];
+            NSLog(@"[HAPManager] Shim: %@ → %@ (%lu exports: %@) %@",
+                  modSpec, shimPath.lastPathComponent, (unsigned long)imports.count,
+                  sortedImports, ok ? @"✅ written" : [NSString stringWithFormat:@"❌ %@", wrErr]);
         }
         if (moduleToImports.count > 0) {
             NSLog(@"[HAPManager] Shim: directory contents of %@", shimRoot);
