@@ -1,6 +1,9 @@
 #import "LogFloatingButton.h"
 #include <unistd.h>
 
+NSNotificationName const kLogMenuExitHAPNotification = @"kLogMenuExitHAPNotification";
+NSNotificationName const kLogMenuRestartHAPNotification = @"kLogMenuRestartHAPNotification";
+
 static LogFloatingButton *_sharedInstance;
 static NSMutableString *_logBuffer;
 static int _originalStderrFD = -1;
@@ -93,8 +96,9 @@ static const NSUInteger kMaxLogBufferSize = 512 * 1024;
 #pragma mark - 悬浮窗 UI
 
 - (void)createFloatingWindow {
-    CGFloat diameter = 56;
-    CGRect frame = CGRectMake(16, 220, diameter, diameter);
+    CGFloat width = 64;
+    CGFloat height = 36;
+    CGRect frame = CGRectMake(16, 220, width, height);
 
     self.window = [[UIWindow alloc] initWithFrame:frame];
     // 低于崩溃防护窗口(windowLevel = UIWindowLevelAlert + 1000)
@@ -107,19 +111,20 @@ static const NSUInteger kMaxLogBufferSize = 512 * 1024;
     self.button = [UIButton buttonWithType:UIButtonTypeCustom];
     self.button.frame = self.window.rootViewController.view.bounds;
     self.button.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.button.layer.cornerRadius = diameter / 2;
-    self.button.backgroundColor = [UIColor colorWithRed:0.2 green:0.75 blue:0.2 alpha:1.0];
+    // 灰色背景,黑色文字
+    self.button.backgroundColor = [UIColor colorWithRed:0.85 green:0.85 blue:0.85 alpha:0.9];
+    self.button.layer.cornerRadius = 8;
     self.button.layer.masksToBounds = YES;
-    self.button.layer.borderWidth = 2;
-    self.button.layer.borderColor = [UIColor whiteColor].CGColor;
+    self.button.layer.borderWidth = 1;
+    self.button.layer.borderColor = [UIColor colorWithRed:0.6 green:0.6 blue:0.6 alpha:1.0].CGColor;
     self.button.layer.shadowColor = [UIColor blackColor].CGColor;
     self.button.layer.shadowOpacity = 0.3;
-    self.button.layer.shadowRadius = 4;
-    self.button.layer.shadowOffset = CGSizeMake(0, 2);
+    self.button.layer.shadowRadius = 3;
+    self.button.layer.shadowOffset = CGSizeMake(0, 1);
 
-    [self.button setTitle:@"日志" forState:UIControlStateNormal];
-    self.button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
-    [self.button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [self.button setTitle:@"菜单" forState:UIControlStateNormal];
+    self.button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    [self.button setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
 
     [self.button addTarget:self action:@selector(buttonTapped) forControlEvents:UIControlEventTouchUpInside];
 
@@ -151,14 +156,109 @@ static const NSUInteger kMaxLogBufferSize = 512 * 1024;
     [gesture setTranslation:CGPointZero inView:self.button.window];
 }
 
-#pragma mark - 点击复制
+#pragma mark - 点击弹出菜单
 
 - (void)buttonTapped {
+    // 找到当前最顶层的 VC 来 present ActionSheet
+    UIViewController *topVC = [self topViewController];
+    if (!topVC) {
+        // 兜底:直接复制日志
+        [self copyLogs];
+        return;
+    }
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
+                                                                    message:nil
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"退出hap应用"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:kLogMenuExitHAPNotification object:nil];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"重启hap应用"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:kLogMenuRestartHAPNotification object:nil];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"复制日志"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [self copyLogs];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    // iPad 需要 popoverAnchor
+    if (sheet.popoverPresentationController) {
+        sheet.popoverPresentationController.sourceView = topVC.view;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(topVC.view.bounds.size.width / 2,
+                                                                    topVC.view.bounds.size.height / 2,
+                                                                    1, 1);
+        sheet.popoverPresentationController.permittedArrowDirections = 0;
+    }
+
+    [topVC presentViewController:sheet animated:YES completion:nil];
+}
+
+// 获取当前最顶层的可见 ViewController,用于 present ActionSheet。
+// 优先使用 normal level 的主 window(跳过悬浮窗自己和崩溃窗口)。
+- (UIViewController *)topViewController {
+    UIWindowScene *scene = nil;
+    for (UIWindowScene *s in UIApplication.sharedApplication.connectedScenes) {
+        if ([s isKindOfClass:[UIWindowScene class]] && s.activationState == UISceneActivationStateForegroundActive) {
+            scene = s;
+            break;
+        }
+    }
+    if (!scene) return nil;
+
+    // 优先找 normal level 的主 window(应用主界面)
+    for (UIWindow *win in scene.windows) {
+        if (win.hidden) continue;
+        if (win.windowLevel != UIWindowLevelNormal) continue;
+        if (win == self.window) continue;
+        UIViewController *root = win.rootViewController;
+        if (root) {
+            return [self findTopFrom:root];
+        }
+    }
+    // fallback:高 level 的崩溃窗口(崩溃时主 window 可能已损坏)
+    for (UIWindow *win in scene.windows) {
+        if (win.hidden) continue;
+        if (win == self.window) continue;
+        UIViewController *root = win.rootViewController;
+        if (root) {
+            return [self findTopFrom:root];
+        }
+    }
+    return nil;
+}
+
+- (UIViewController *)findTopFrom:(UIViewController *)root {
+    UIViewController *vc = root;
+    while (vc.presentedViewController) {
+        vc = vc.presentedViewController;
+    }
+    if ([vc isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)vc;
+        UIViewController *top = nav.topViewController;
+        if (top) return top;
+    }
+    return vc;
+}
+
+#pragma mark - 复制日志
+
+- (void)copyLogs {
     NSString *logs = [self capturedLogs];
     if (!logs || logs.length == 0) {
         logs = @"(暂无日志)";
     }
-
     [UIPasteboard generalPasteboard].string = logs;
     [self showToastWithMessage:@"日志已复制到剪贴板"];
 }

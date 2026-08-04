@@ -208,6 +208,10 @@
 }
 
 - (void)viewWillAppear:(BOOL)animated {
+    // hap 运行时隐藏蓝色导航栏,避免遮挡 ArkUI-X 渲染界面。
+    // 列表页(HAPViewController)会在 viewWillDisappear 时恢复导航栏。
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
+
     // 已经处于错误展示状态时,不再转发任何生命周期给 StageVC,避免二次触发同一异常。
     if (self.errorOccurred) {
         [super viewWillAppear:animated];
@@ -243,6 +247,9 @@
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
+    // 离开 hap 播放页时恢复导航栏,让列表页的蓝色标题栏正常显示。
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
+
     if (!self.didLoadViewSucceed) {
         [super viewWillDisappear:animated];
         return;

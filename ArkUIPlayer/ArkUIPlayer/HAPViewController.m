@@ -1,5 +1,6 @@
 #import "HAPViewController.h"
 #import "HAPPlayerViewController.h"
+#import "LogFloatingButton.h"
 #import <QuartzCore/QuartzCore.h>
 
 @interface HAPViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
@@ -8,6 +9,8 @@
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *hapInfoList;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UIButton *installButton;
+// 标记正在重启 hap,避免 viewDidLoad 注册的通知在 pop 时重复触发。
+@property (nonatomic, assign) BOOL isRestarting;
 
 @end
 
@@ -24,12 +27,26 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.title = @"arkui容器";
     self.view.backgroundColor = [UIColor whiteColor];
-    
+
     [self setupUI];
     [self loadHAPList];
+
+    // 监听悬浮菜单的退出/重启通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleExitHAP)
+                                               name:kLogMenuExitHAPNotification
+                                             object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleRestartHAP)
+                                               name:kLogMenuRestartHAPNotification
+                                             object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)setupUI {
@@ -346,13 +363,110 @@
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         NSDictionary *hapInfo = self.hapInfoList[indexPath.row];
         NSString *hapPath = hapInfo[@"path"];
-        
+
         NSFileManager *fm = [NSFileManager defaultManager];
         [fm removeItemAtPath:hapPath error:nil];
-        
+
         [self.hapInfoList removeObjectAtIndex:indexPath.row];
         [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
     }
+}
+
+#pragma mark - 悬浮菜单:退出 / 重启 hap
+
+// 退出 hap 应用:pop 回列表页并卸载 hap 数据,释放 ArkUI ability。
+- (void)handleExitHAP {
+    NSLog(@"[HAPList] 菜单:退出 hap 应用");
+    @try {
+        [self.navigationController popToRootViewControllerAnimated:YES];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPList] 退出 popToRoot crashed: %@", e);
+    }
+    [self.hapManager unloadCurrentHAP];
+    [self.hapManager hideGlobalError];
+}
+
+// 重启 hap 应用:卸载当前 hap 后用同样的路径重新加载并 push 播放页。
+- (void)handleRestartHAP {
+    if (self.isRestarting) {
+        NSLog(@"[HAPList] 菜单:重启进行中,忽略重复请求");
+        return;
+    }
+
+    NSString *hapPath = [self.hapManager currentHAPPath];
+    if (!hapPath.length) {
+        NSLog(@"[HAPList] 菜单:重启失败,currentHAPPath 为空");
+        return;
+    }
+
+    // 保存当前 hap 的入口信息,卸载后 HAPManager 的 readonly 属性会被清空。
+    NSString *bundleName = [self.hapManager currentBundleName] ?: @"entry";
+    NSString *moduleName = [self.hapManager currentModuleName] ?: @"entry";
+    NSString *abilityName = [self.hapManager currentAbilityName] ?: @"EntryAbility";
+    NSString *appName = [self.hapManager currentAppName] ?: hapPath.lastPathComponent;
+    NSString *pageName = [self.hapManager currentPageName] ?: @"";
+
+    NSLog(@"[HAPList] 菜单:重启 hap 应用 path=%@", hapPath);
+    self.isRestarting = YES;
+
+    // 先 pop 回根 VC,让旧的 HAPPlayerViewController 被 dealloc,
+    // 再 unloadCurrentHAP 释放 ability,最后重新加载。
+    @try {
+        [self.navigationController popToRootViewControllerAnimated:NO];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPList] 重启 popToRoot crashed: %@", e);
+    }
+
+    [self.hapManager hideGlobalError];
+    [self.hapManager unloadCurrentHAP];
+
+    [self.loadingIndicator startAnimating];
+
+    __weak typeof(self) weakSelf = self;
+    [self.hapManager loadHAPAtPath:hapPath completion:^(BOOL success, NSString *errorMessage) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.isRestarting = NO;
+        [strongSelf.loadingIndicator stopAnimating];
+
+        if (!success) {
+            NSLog(@"[HAPList] 重启失败: %@", errorMessage);
+            [strongSelf.hapManager showGlobalError:errorMessage shortText:@"重启失败"];
+            return;
+        }
+
+        NSLog(@"[HAPList] 重启成功,创建新的 HAPPlayerViewController");
+        HAPPlayerViewController *playerVC;
+        @try {
+            playerVC = [[HAPPlayerViewController alloc]
+                initWithHAPManager:strongSelf.hapManager
+                        bundleName:bundleName
+                        moduleName:moduleName
+                       abilityName:abilityName
+                          appName:appName
+                         pageName:pageName];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 重启 init crashed: %@", e);
+            NSString *msg = [NSString stringWithFormat:@"重启 init: %@\n%@",
+                             e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+            [strongSelf.hapManager showGlobalError:msg shortText:@"报错"];
+            return;
+        }
+
+        if (!playerVC) {
+            [strongSelf.hapManager showGlobalError:@"重启失败:无法创建播放页面" shortText:@"报错"];
+            return;
+        }
+
+        @try {
+            [strongSelf.navigationController pushViewController:playerVC animated:YES];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 重启 push crashed: %@", e);
+            NSString *msg = [NSString stringWithFormat:@"重启 push: %@\n%@",
+                             e.reason ?: e.name, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+            [strongSelf.hapManager showGlobalError:msg shortText:@"报错"];
+        }
+    }];
 }
 
 @end
