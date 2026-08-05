@@ -50,5 +50,18 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+
+    <!-- hoi URL Scheme:支持 hoi://{bundleName}/ 一键跳转对应 hap 界面 -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.hoi.deepurl</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>hoi</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
