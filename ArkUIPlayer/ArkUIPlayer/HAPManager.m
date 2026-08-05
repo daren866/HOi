@@ -1642,32 +1642,41 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 if (s.length == 0) { i = j + 1; continue; }
                 i = j + 1;
                 // 过滤有效模块名:
-                //   "@hms:xxx" / "@ohos:xxx" / "@app:xxx" — 命名空间模块 (冒号分隔)
+                //   "@hms:xxx" / "@hms/xxx" / "@ohos:xxx" / "@ohos/xxx" / "@app:xxx" / "@app/xxx"
+                //     — 命名空间模块 (冒号或斜杠分隔,ABC/pandagen 内部可能混用两种格式)
                 //   "@kit.XXX" — HarmonyOS API 12+ kit 命名空间 (点号分隔)
                 BOOL isKitMod = [s hasPrefix:@"@kit."];
-                BOOL isNsMod  = ([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@ohos:"] || [s hasPrefix:@"@app:"]) && [s containsString:@":"];
+                BOOL hasNsPrefix = ([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@hms/"] ||
+                                    [s hasPrefix:@"@ohos:"] || [s hasPrefix:@"@ohos/"] ||
+                                    [s hasPrefix:@"@app:"] || [s hasPrefix:@"@app/"]);
+                BOOL hasSep = ([s containsString:@":"] || [s containsString:@"/"]);
+                BOOL isNsMod = hasNsPrefix && hasSep;
                 if (!isKitMod && !isNsMod) {
                     continue;
                 }
 
-                // ===== 核心策略 (2026-08-03 组件库渲染修复) =====
+                // ===== 核心策略 =====
                 // 默认拒绝(白名单允许)模式:
-                //   - @hms:* → 允许(HMS 生态专有,iOS 端 SDK 没有)
+                //   - @hms:* / @hms/* → 允许(HMS 生态专有,iOS 端 SDK 没有)
                 //   - @kit.* → 默认跳过(标准 kit,SDK 已内置),白名单内的 HMS 专有 kit 除外
-                //   - @ohos:* → 默认跳过(SDK 已内置),例外清单中的才允许
-                //   - 其他命名空间模块 → 允许(第三方跨平台模块兜底)
-                //
-                // 关键修复:组件库 (HarmonyOSComponentUXExamples) 使用 @kit.UIDesignKit 导入
-                // HdsNavigation 等 HMS 设计系统组件。@kit.UIDesignKit 是 HMS 专有 kit,
-                // iOS 端 SDK 没有,必须生成 shim,否则 import HdsNavigation 会抛 SyntaxError
-                // → 整个页面白屏。helloworld 不使用此类 kit,所以能正常渲染。
-                BOOL isHmsMod    = [s hasPrefix:@"@hms:"];
-                BOOL isOhosMod   = [s hasPrefix:@"@ohos:"];
-                BOOL isAppMod    = [s hasPrefix:@"@app:"];
+                //   - @ohos:* / @ohos/* → 标准 @ohos:xxx 默认跳过(SDK 已内置)
+                //     - 例外清单:runtime 确认 "native exports undefined" 的模块(如 @ohos:fileio 等)
+                //     - @ohos/xxx 斜杠格式:通常是 hap 内部模块(如 @ohos/kugouplayer 酷狗内部 native so)
+                //       → 直接允许,这些模块 iOS 端不可能有
+                //   - @app:* / @app/* → 允许(hap 内部 native so,iOS 端无实现)
+                //   - 其他 → 允许(第三方跨平台模块兜底)
+                BOOL isHmsMod = ([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@hms/"]);
+                BOOL isOhosColon = [s hasPrefix:@"@ohos:"];   // @ohos:fileio 等标准模块
+                BOOL isOhosSlash = [s hasPrefix:@"@ohos/"];   // @ohos/kugouplayer 等 hap 内部模块
+                BOOL isOhosMod = isOhosColon || isOhosSlash;
+                BOOL isAppMod = ([s hasPrefix:@"@app:"] || [s hasPrefix:@"@app/"]);
                 BOOL isKitModNS  = [s hasPrefix:@"@kit."];
                 BOOL allowShim   = NO;
                 if (isHmsMod) {
-                    // HMS 生态专有模块(HDS 设计系统、系统分享等):iOS 端肯定没实现,允许生成 shim。
+                    allowShim = YES;
+                } else if (isOhosSlash) {
+                    // @ohos/xxx 斜杠格式:通常是 hap 打包时重命名的内部模块(如 kugouplayer),
+                    // iOS 端 SDK 不可能原生提供,直接允许 shim。
                     allowShim = YES;
                 } else if (isAppMod) {
                     // @app:bundleName/moduleName/soname — hap 自带的 native so。
@@ -1864,6 +1873,8 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             //   "@app:com.kugou.hmmusic/entry/jengine" → ns="@app"(去@→"app"),
             //     tail="com.kugou.hmmusic/entry/jengine" → 按 . 和 / 分割
             //     → app/com/kugou/hmmusic/entry/jengine.ets
+            //   "@ohos/kugouplayer" → (斜杠分隔) ns="@ohos"(去@→"ohos"), tail="kugouplayer"
+            //     → ohos/kugouplayer.ets
             NSMutableArray<NSString *> *pathComps = [NSMutableArray array];
             if ([modSpec hasPrefix:@"@kit."]) {
                 // @kit.XXX → ["kit", "XXX"]
@@ -1871,17 +1882,35 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 [pathComps addObject:@"kit"];
                 [pathComps addObject:kitName];
             } else {
-                // @hms:xxx / @ohos:xxx / @app:xxx → ["hms"/"ohos"/"app", ...path parts]
-                NSRange colon = [modSpec rangeOfString:@":"];
-                NSString *ns = [modSpec substringToIndex:colon.location];
-                NSString *pathTail = [modSpec substringFromIndex:colon.location + 1];
+                // 命名空间模块:找第一个 : 或 / 作为分隔符
+                NSRange colonR = [modSpec rangeOfString:@":"];
+                NSRange slashR = [modSpec rangeOfString:@"/"];
+                NSUInteger sepIdx = NSNotFound;
+                if (colonR.location != NSNotFound && slashR.location != NSNotFound) {
+                    sepIdx = MIN(colonR.location, slashR.location);
+                } else if (colonR.location != NSNotFound) {
+                    sepIdx = colonR.location;
+                } else if (slashR.location != NSNotFound) {
+                    sepIdx = slashR.location;
+                }
+                NSString *ns = nil;
+                NSString *pathTail = nil;
+                if (sepIdx != NSNotFound) {
+                    ns = [modSpec substringToIndex:sepIdx];
+                    pathTail = [modSpec substringFromIndex:sepIdx + 1];
+                } else {
+                    ns = modSpec;
+                    pathTail = @"";
+                }
                 [pathComps addObject:[ns stringByReplacingOccurrencesOfString:@"@" withString:@""]];
-                // 同时按 . 和 / 分割 (处理 @app:bundle/module/soname 格式)
-                NSArray<NSString *> *dotParts = [pathTail componentsSeparatedByString:@"."];
-                for (NSString *dp in dotParts) {
-                    NSArray<NSString *> *slashParts = [dp componentsSeparatedByString:@"/"];
-                    for (NSString *sp in slashParts) {
-                        if (sp.length > 0) { [pathComps addObject:sp]; }
+                // 同时按 . 和 / 分割 (处理 @app:bundle/module/soname / @ohos/kugouplayer 等)
+                if (pathTail.length > 0) {
+                    NSArray<NSString *> *dotParts = [pathTail componentsSeparatedByString:@"."];
+                    for (NSString *dp in dotParts) {
+                        NSArray<NSString *> *slashParts = [dp componentsSeparatedByString:@"/"];
+                        for (NSString *sp in slashParts) {
+                            if (sp.length > 0) { [pathComps addObject:sp]; }
+                        }
                     }
                 }
             }
@@ -1911,20 +1940,32 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                                [modSpec containsString:@"DesignKit"];
 
             // ===== 深度可调用 Proxy =====
-            // 核心问题:之前用 Object.freeze({}) 导出,导致 obj.method() 时 method 是 undefined,
-            // 抛 TypeError: undefined is not callable。
-            // Proxy 方案:任何属性访问都返回 _deep 自身(可调用),调用返回 undefined。
-            // 这样 obj.method().chain.foo() 整条链都不会崩溃。
-            // 如果 ArkTS 不支持 Proxy,try/catch 回退到 _noop 函数(至少直接调用不崩溃)。
+            // 核心问题:obj.method() 返回 undefined 后,链式访问 undefined.foo 崩溃。
+            // ArkTS 编译期静态类型检查不认 Proxy 全局变量,new Proxy 直接写会编译失败。
+            // 用全局对象的字符串索引绕过类型检查。
+            //
+            // 关键: apply 也返回 _deep,链式访问不 undefined:
+            //   obj.method() → _deep,obj.method().foo → _deep,obj.method().foo() → _deep
             [content appendString:@"// ===== Deep callable: 任何属性访问/调用都安全返回 =====\n"];
-            [content appendString:@"function _noop(...args: any[]): any { return undefined; }\n"];
-            [content appendString:@"let _deep: any = _noop;\n"];
-            [content appendString:@"try {\n"];
-            [content appendString:@"    _deep = new Proxy(_noop, {\n"];
-            [content appendString:@"        get: function(_t: any, _p: string | symbol): any { return _deep; },\n"];
-            [content appendString:@"        apply: function(): any { return undefined; },\n"];
-            [content appendString:@"    });\n"];
-            [content appendString:@"} catch (_e) { }\n\n"];
+            [content appendString:@"function _noopFun(...args: any[]): any { return undefined; }\n"];
+            [content appendString:@"let _deep: any = _noopFun;\n"];
+            [content appendString:@"{\n"];
+            [content appendString:@"    // 通过全局对象动态获取 Proxy,绕过 ArkTS 静态类型检查\n"];
+            [content appendString:@"    let _G: any = (typeof globalThis !== 'undefined') ? globalThis : ((typeof window !== 'undefined') ? window : ((typeof self !== 'undefined') ? self : {}));\n"];
+            [content appendString:@"    let _P: any = _G ? (_G['Proxy'] || _G['proxy']) : undefined;\n"];
+            [content appendString:@"    if (typeof _P === 'function') {\n"];
+            [content appendString:@"        try {\n"];
+            [content appendString:@"            _deep = _P(_noopFun, {\n"];
+            [content appendString:@"                get: function(_t: any, _p: any): any { return _deep; },\n"];
+            [content appendString:@"                apply: function(_t: any, _c: any, _a: any[]): any { return _deep; },\n"];
+            [content appendString:@"                construct: function(_t: any, _a: any[]): any { return _deep; },\n"];
+            [content appendString:@"                has: function(): boolean { return true; },\n"];
+            [content appendString:@"                ownKeys: function(): any[] { return []; },\n"];
+            [content appendString:@"                getOwnPropertyDescriptor: function(): any { return { configurable: true, enumerable: true }; },\n"];
+            [content appendString:@"            });\n"];
+            [content appendString:@"        } catch(_e) {}\n"];
+            [content appendString:@"    }\n"];
+            [content appendString:@"}\n\n"];
 
             for (NSString *name in imports) {
                 // 为每个 import 名生成占位。优先按命名约定判断。
