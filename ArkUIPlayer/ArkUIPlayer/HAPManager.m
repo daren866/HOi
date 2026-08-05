@@ -1760,13 +1760,15 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 // 为该模块在 moduleToImports 中创建条目
                 if (!moduleToImports[s]) {
                     moduleToImports[s] = [NSMutableSet set];
+                    NSLog(@"[HAPManager] Shim: detected module specifier: %@", s);
                 }
 
                 // 向后(从 j 开始)扫附近的字符串,收集与这个模块 import 相关的标识符名。
                 // 在 PANDA abc 的 literal/string sections 里, import specifier 后紧跟着 import binding。
-                // 做一个窗口 512 字节内的字符串收集, 合法标识符 ([A-Za-z_$][A-Za-z0-9_$]*).
+                // 做一个窗口 4096 字节内的字符串收集, 合法标识符 ([A-Za-z_$][A-Za-z0-9_$]*).
+                // (之前 1024 字节窗口太小,会漏掉 pcSetFilesDir 等稍远距离的 binding 名)
                 NSMutableString *tok = [NSMutableString string];
-                for (NSUInteger k = j + 1; k < MIN(len, j + 1024); k++) {
+                for (NSUInteger k = j + 1; k < MIN(len, j + 4096); k++) {
                     unsigned char c = bytes[k];
                     if (c == '\0') {
                         if (tok.length >= 1) {
@@ -1863,7 +1865,13 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
 
         for (NSString *modSpec in moduleToImports.allKeys) {
             NSSet<NSString *> *imports = moduleToImports[modSpec];
-            if (imports.count == 0) { continue; }
+            // 对于 @ohos/* 和 @app:* 模块(hap 内部 native so),即使没扫到具名 binding,
+            // 也必须生成 shim(只有 default 导出),因为 hap 代码可能用 default 导入或 namespace 导入:
+            //   import kpg from '@ohos/kugouplayer'; kpg.pcSetFilesDir(...)
+            //   import * as kpg from '@ohos/kugouplayer'; kpg.pcSetFilesDir(...)
+            // 如果跳过,模块会被 SDK 原生拦截(native exports undefined),default 是 undefined → 崩溃。
+            BOOL isHapInternalSo = [modSpec hasPrefix:@"@ohos/"] || [modSpec hasPrefix:@"@app:"] || [modSpec hasPrefix:@"@app/"];
+            if (imports.count == 0 && !isHapInternalSo) { continue; }
 
             // 路径生成:
             //   "@hms:hds.hdsBaseComponent" → ns="@hms"(去@→"hms"), tail="hds.hdsBaseComponent"
@@ -1939,33 +1947,64 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                                [modSpec containsString:@"UIDesignKit"] ||
                                [modSpec containsString:@"DesignKit"];
 
-            // ===== 深度可调用 Proxy =====
+            // ===== 深度可调用 class (不用 Proxy) =====
             // 核心问题:obj.method() 返回 undefined 后,链式访问 undefined.foo 崩溃。
-            // ArkTS 编译期静态类型检查不认 Proxy 全局变量,new Proxy 直接写会编译失败。
-            // 用全局对象的字符串索引绕过类型检查。
+            // Proxy 在 ArkUI-X iOS 运行时不可用(被限制或运行时报错),
+            // 改用普通 class + 方法返回 this 实现链式调用。
             //
-            // 关键: apply 也返回 _deep,链式访问不 undefined:
-            //   obj.method() → _deep,obj.method().foo → _deep,obj.method().foo() → _deep
-            [content appendString:@"// ===== Deep callable: 任何属性访问/调用都安全返回 =====\n"];
-            [content appendString:@"function _noopFun(...args: any[]): any { return undefined; }\n"];
-            [content appendString:@"let _deep: any = _noopFun;\n"];
-            [content appendString:@"{\n"];
-            [content appendString:@"    // 通过全局对象动态获取 Proxy,绕过 ArkTS 静态类型检查\n"];
-            [content appendString:@"    let _G: any = (typeof globalThis !== 'undefined') ? globalThis : ((typeof window !== 'undefined') ? window : ((typeof self !== 'undefined') ? self : {}));\n"];
-            [content appendString:@"    let _P: any = _G ? (_G['Proxy'] || _G['proxy']) : undefined;\n"];
-            [content appendString:@"    if (typeof _P === 'function') {\n"];
-            [content appendString:@"        try {\n"];
-            [content appendString:@"            _deep = _P(_noopFun, {\n"];
-            [content appendString:@"                get: function(_t: any, _p: any): any { return _deep; },\n"];
-            [content appendString:@"                apply: function(_t: any, _c: any, _a: any[]): any { return _deep; },\n"];
-            [content appendString:@"                construct: function(_t: any, _a: any[]): any { return _deep; },\n"];
-            [content appendString:@"                has: function(): boolean { return true; },\n"];
-            [content appendString:@"                ownKeys: function(): any[] { return []; },\n"];
-            [content appendString:@"                getOwnPropertyDescriptor: function(): any { return { configurable: true, enumerable: true }; },\n"];
-            [content appendString:@"            });\n"];
-            [content appendString:@"        } catch(_e) {}\n"];
-            [content appendString:@"    }\n"];
-            [content appendString:@"}\n\n"];
+            // 局限:无法拦截任意动态属性名,但能覆盖 hap 中绝大多数常见调用模式:
+            //   obj.method()      → 返回 _Deep 实例(继续链式)
+            //   obj.foo.bar       → 静态属性声明为 _Deep 类型(继续链式)
+            //   new obj()         → 返回 _Deep 实例
+            //   obj.FIELD         → 已声明的静态字段,值为 _Deep 实例
+            //
+            // 已声明的常见方法/属性(覆盖日志观察到的 pcSetFilesDir / showToast 等):
+            [content appendString:@"// ===== Deep callable class (no Proxy) =====\n"];
+            [content appendString:@"class _Deep {\n"];
+            [content appendString:@"    // 常见 native so 导出方法 (运行时日志观察到的)\n"];
+            [content appendString:@"    pcSetFilesDir(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcInit(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcPlay(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcPause(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcStop(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcSeek(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcGetDuration(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcGetPosition(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcSetVolume(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcSetLoopMode(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcSetRate(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pcRelease(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    showToast(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    showActionMenu(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    showDialog(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    createHttp(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    request(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    destroy(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    on(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    off(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    emit(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    get(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    set(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    open(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    close(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    read(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    write(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    init(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    start(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    stop(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    play(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    pause(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    // 通用兜底方法 (catch-all 不可用,故列举常见动词)\n"];
+            [content appendString:@"    create(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    update(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    delete(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    query(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    insert(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    remove(..._a: any[]): _Deep { return this; }\n"];
+            [content appendString:@"    constructor(..._a: any[]) {}\n"];
+            [content appendString:@"}\n"];
+            [content appendString:@"// 单例:所有导出共享一个 _Deep 实例\n"];
+            [content appendString:@"const _deep: _Deep = new _Deep();\n\n"];
 
             for (NSString *name in imports) {
                 // 为每个 import 名生成占位。优先按命名约定判断。

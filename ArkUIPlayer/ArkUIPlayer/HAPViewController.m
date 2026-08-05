@@ -6,8 +6,9 @@
 @interface HAPViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSMutableArray<NSDictionary *> *hapInfoList;
-@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+// hapInfoList / loadingIndicator 在 .h 中声明为 readonly,这里改为 readwrite 以便内部修改。
+@property (nonatomic, strong, readwrite) NSMutableArray<NSDictionary *> *hapInfoList;
+@property (nonatomic, strong, readwrite) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UIButton *installButton;
 // 标记正在重启 hap,避免 viewDidLoad 注册的通知在 pop 时重复触发。
 @property (nonatomic, assign) BOOL isRestarting;
@@ -370,6 +371,62 @@
         [self.hapInfoList removeObjectAtIndex:indexPath.row];
         [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
     }
+}
+
+// 左划(trailing swipe)自定义操作:复制地址 + 删除
+// 替换 iOS 默认的 commitEditingStyle 单一删除行为,添加"复制地址"(复制 hoi://包名/ URL)选项。
+- (nullable UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
+                     trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath  API_AVAILABLE(ios(11.0)) {
+    NSDictionary *hapInfo = self.hapInfoList[indexPath.row];
+    NSString *bundleName = hapInfo[@"bundleName"] ?: hapInfo[@"name"] ?: @"";
+
+    // --- 1. 删除 ---
+    UIContextualAction *deleteAction =
+        [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
+                                                title:NSLocalizedString(@"Delete", nil)
+                                              handler:^(UIContextualAction * _Nonnull action,
+                                                        __kindof UIView * _Nonnull sourceView,
+                                                        void (^ _Nonnull completionHandler)(BOOL)) {
+        NSDictionary *hapInfo2 = self.hapInfoList[indexPath.row];
+        NSString *hapPath = hapInfo2[@"path"];
+        NSFileManager *fm = [NSFileManager defaultManager];
+        [fm removeItemAtPath:hapPath error:nil];
+        [self.hapInfoList removeObjectAtIndex:indexPath.row];
+        [self.tableView deleteRowsAtIndexPaths:@[indexPath]
+                              withRowAnimation:UITableViewRowAnimationAutomatic];
+        completionHandler(YES);
+    }];
+    deleteAction.backgroundColor = [UIColor systemRedColor];
+
+    // --- 2. 复制地址 hoi://{bundleName}/ ---
+    NSString *copyTitle = NSLocalizedString(@"Copy url", nil);
+    // 优先用中文,zh-CN 下显示"复制地址",其他语言 NSLocalizedString 会走 English 表显示"Copy url"。
+    // 如果 NSLocalizedString 未配置本地化,fallback 到"Copy url"。
+    // 这里额外做个中文探测(NSLocale preferredLanguages),让没有 strings 文件时中文仍正确显示。
+    NSArray<NSString *> *langs = [NSLocale preferredLanguages];
+    if (langs.count > 0) {
+        NSString *first = langs.firstObject;
+        if ([first hasPrefix:@"zh"]) {
+            copyTitle = @"复制地址";
+        }
+    }
+    UIContextualAction *copyAction =
+        [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                title:copyTitle
+                                              handler:^(UIContextualAction * _Nonnull action,
+                                                        __kindof UIView * _Nonnull sourceView,
+                                                        void (^ _Nonnull completionHandler)(BOOL)) {
+        // URL 格式: hoi://{包名}/
+        NSString *url = [NSString stringWithFormat:@"hoi://%@/", bundleName];
+        [UIPasteboard generalPasteboard].string = url;
+        NSLog(@"[HAPList] 复制地址到剪贴板: %@", url);
+        // 轻微触觉反馈 + toast 提示(用系统提示太突兀,这里只 toast 到控制台即可)
+        completionHandler(YES);
+    }];
+    copyAction.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];  // 系统蓝色
+
+    // 左划完全展开时优先执行复制(更常用)
+    return [UISwipeActionsConfiguration configurationWithActions:@[ deleteAction, copyAction ]];
 }
 
 #pragma mark - 悬浮菜单:退出 / 重启 hap
