@@ -1,6 +1,42 @@
-.vs/
+```objc
+# Compiled and build artifacts
+*.o
+*.obj
+*.a
+*.dylib
+*.so
+*.bundle
+
+# Dependencies
+Pods/
+Carthage/
+build/
+*.xcworkspace/
+xcuserdata/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
 .vscode/
-*.iml
 .idea/
-CMakeLists.txt
-cmake-build-debug/
+*.swp
+*.swo
+
+# iOS/Mac specific
+*.ipa
+*.dSYM
+*.app
+*.framework
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+```
