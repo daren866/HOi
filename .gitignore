@@ -5,24 +5,19 @@
 *.a
 *.dylib
 *.so
-*.bundle
+*.dll
+*.exe
+*.out
 
 # Dependencies
 Pods/
 Carthage/
 build/
-*.xcworkspace/
-xcuserdata/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
-
-# Environment
-.env
-.env.local
-*.env.*
 
 # Editors
 .vscode/
@@ -30,13 +25,38 @@ xcuserdata/
 *.swp
 *.swo
 
+# Environment
+.env
+.env.local
+*.env.*
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# macOS
+.DS_Store
+*.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
 # iOS/Mac specific
-*.ipa
-*.dSYM
-*.app
-*.framework
 *.xcodeproj/
 *.xcworkspace/
-xcuserdata/
+*.xcconfig
+*.plist
+*.strings
+*.storyboard
+*.xcassets/
 DerivedData/
+*.app
+*.ipa
+*.dSYM*
 ```
