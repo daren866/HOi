@@ -530,22 +530,16 @@
     }];
 }
 
-// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API
-// 只要 arkui 应用还在前台，都执行 popViewControllerAnimated
+// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API (keyCode=2)
+// 只要 arkui 应用还在前台，不判断导航栈多少，都执行 popViewControllerAnimated
 - (void)handleBackPress {
     NSLog(@"[HAPList] 菜单：返回界面");
     
-    // 检查导航栈中是否有可以返回的页面
-    if (self.navigationController.viewControllers.count > 1) {
-        // 有页面可以返回，执行返回操作
-        @try {
-            [self.navigationController popViewControllerAnimated:YES];
-        } @catch (NSException *e) {
-            NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
-        }
-    } else {
-        // 已经在根控制器，无法返回
-        NSLog(@"[HAPList] 已在根控制器，无法返回");
+    // 直接执行 popViewControllerAnimated，不判断导航栈数量
+    @try {
+        [self.navigationController popViewControllerAnimated:YES];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
     }
 }
 
