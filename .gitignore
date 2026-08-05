@@ -1,62 +1,50 @@
-```objc
+```
 # Compiled and build artifacts
 *.o
 *.obj
 *.a
-*.dylib
-*.so
+*.lib
 *.dll
+*.so
+*.dylib
 *.exe
 *.out
 
 # Dependencies
-Pods/
-Carthage/
-build/
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.egg-info/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*
 
 # Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# macOS
+# OS generated files
 .DS_Store
-*.DS_Store
-.AppleDouble
-.LSOverride
-Icon?
+.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# iOS/Mac specific
-*.xcodeproj/
-*.xcworkspace/
-*.xcconfig
-*.plist
-*.strings
-*.storyboard
-*.xcassets/
-DerivedData/
-*.app
-*.ipa
-*.dSYM*
 ```
