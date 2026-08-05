@@ -3,6 +3,7 @@
 
 NSNotificationName const kLogMenuExitHAPNotification = @"kLogMenuExitHAPNotification";
 NSNotificationName const kLogMenuRestartHAPNotification = @"kLogMenuRestartHAPNotification";
+NSNotificationName const kLogMenuBackPressNotification = @"kLogMenuBackPressNotification";
 
 static LogFloatingButton *_sharedInstance;
 static NSMutableString *_logBuffer;
