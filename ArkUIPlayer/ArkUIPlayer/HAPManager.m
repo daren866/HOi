@@ -1910,6 +1910,25 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                                [modSpec containsString:@"UIDesignKit"] ||
                                [modSpec containsString:@"DesignKit"];
 
+            // ===== 深度可调用 Proxy =====
+            // 核心问题:之前用 Object.freeze({}) 导出,导致 obj.method() 时 method 是 undefined,
+            // 抛 TypeError: undefined is not callable。
+            // Proxy 方案:任何属性访问都返回 _deep 自身(可调用),调用返回 undefined。
+            // 这样 obj.method().chain.foo() 整条链都不会崩溃。
+            // 如果 ArkTS 不支持 Proxy,try/catch 回退到 _noop 函数(至少直接调用不崩溃)。
+            [content appendString:@"
+// ===== Deep callable: 任何属性访问/调用都安全返回 =====
+function _noop(...args: any[]): any { return undefined; }
+let _deep: any = _noop;
+try {
+    _deep = new Proxy(_noop, {
+        get: function(_t: any, _p: string | symbol): any { return _deep; },
+        apply: function(): any { return undefined; },
+    });
+} catch (_e) { }
+
+"];
+
             for (NSString *name in imports) {
                 // 为每个 import 名生成占位。优先按命名约定判断。
                 unichar first = [name characterAtIndex:0];
@@ -1920,38 +1939,28 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                         [name isEqualToString:@"BuilderNode"] ||
                         [name isEqualToString:@"FrameNode"] ||
                         [name isEqualToString:@"ComponentContent"]) {
-                        // class 导出 (可 new 的控制器类)
-                        [content appendFormat:@"export class %@ { constructor() {} }\n", name];
+                        // class 导出 (可 new 的控制器类) — 用 _deep 作为 constructor body
+                        [content appendFormat:@"export const %@ = _deep;\n", name];
                     } else if ([name hasSuffix:@"Type"] ||
-                               [name hasSuffix:@"Mode"] ||      // DividerMode, HdsNavDestinationTitleMode
-                               [name hasSuffix:@"Style"] ||     // ActionBarStyle, HdsTitleBarContentStyle
-                               [name hasSuffix:@"Options"] ||   // PaddingOptions, TitleBarStyleOptions
+                               [name hasSuffix:@"Mode"] ||
+                               [name hasSuffix:@"Style"] ||
+                               [name hasSuffix:@"Options"] ||
                                [name isEqualToString:@"NodeRenderType"]) {
-                        // enum / 类型 → 冻结对象 (允许 X.MEMBER 访问,值为 undefined)
-                        // ArkTS 编译器通常会把 enum 成员内联为常量,运行时不需要真实值,
-                        // 但 ModuleResolver 需要导出名存在,否则 import 校验失败。
-                        [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
+                        // enum / 类型 → 用 _deep (X.MEMBER 访问返回 _deep,不崩溃)
+                        [content appendFormat:@"export const %@ = _deep;\n", name];
                     } else if ([name hasSuffix:@"Builder"]) {
-                        // Builder 函数 (如 TitleBuilder, WebSheetBuilder)
-                        [content appendFormat:@"export function %@(...args) {{ return undefined; }}\n", name];
+                        // Builder 函数 — 用 _deep (可直接调用,也可属性访问)
+                        [content appendFormat:@"export const %@ = _deep;\n", name];
                     } else if ([name hasSuffix:@"Model"] ||
                                [name hasSuffix:@"Util"] ||
                                [name hasSuffix:@"Constants"] ||
                                [name hasSuffix:@"Key"] ||
                                [name hasSuffix:@"Token"] ||
                                [name hasSuffix:@"Params"]) {
-                        // 常量对象/工具类 → 冻结对象
-                        [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
+                        // 常量对象/工具类 → 用 _deep
+                        [content appendFormat:@"export const %@ = _deep;\n", name];
                     } else if (isHdsModule && [name hasPrefix:@"Hds"]) {
-                        // ===== HDS 组件:使用 @Component struct + @BuilderParam =====
-                        // 之前的空 class build() {} 不会渲染任何子内容,导致整个页面白屏。
-                        // 改用 @Component struct,@BuilderParam 接收父组件传入的子内容,
-                        // build() 中用 Column() 包裹并调用 this.content() 渲染子组件。
-                        // 这样即使 HdsNavigation 本身是空壳,其内部的 List/Text 等子组件仍能渲染。
-                        //
-                        // 注意:如果 SDK 编译器不支持 @Component 语法,shim 编译会失败,
-                        // ModuleResolver 会回退到 NAPI(不存在),抛 SyntaxError。
-                        // 这种情况下需要回退到空 class 方案。
+                        // HDS 组件:使用 @Component struct + @BuilderParam
                         [content appendFormat:
                             @"\n@Component\n"
                             @"export struct %@ {{\n"
@@ -1965,7 +1974,7 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                             @"    }}\n"
                             @"}}\n\n", name];
                     } else if ([name hasSuffix:@"View"] || [name hasPrefix:@"Sub"]) {
-                        // 视图组件 (SubTitleView 等) — 也用 @Component struct
+                        // 视图组件 — 也用 @Component struct
                         [content appendFormat:
                             @"\n@Component\n"
                             @"export struct %@ {{\n"
@@ -1989,18 +1998,15 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                             @"}}\n\n", name];
                     }
                 } else {
-                    // 小写开头 → 命名空间/函数/常量 → 冻结对象
-                    // 例如 systemShare (from @kit.ShareKit) 是命名空间,
-                    // 代码会访问 systemShare.SharedData / systemShare.SelectionMode 等。
-                    // 用 Object.freeze({}) 让 X.member 访问返回 undefined 而不崩溃,
-                    // 同时满足 ES module 静态 import 校验。
-                    [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
+                    // 小写开头 → 命名空间/函数/常量 → 用 _deep
+                    // _deep 是 Proxy:可直接调用 (_deep() → undefined),
+                    // 也可属性访问 (_deep.foo → _deep),属性也可调用 (_deep.foo() → undefined)。
+                    // 这样 promptAction.showToast() / systemShare.SharedData 等都不会崩溃。
+                    [content appendFormat:@"export const %@ = _deep;\n", name];
                 }
             }
-            // 总是额外导出 default 兜底,支持 `import foo from '@ohos:xxx'` 默认导入语法。
-            // 用空对象而非 undefined:空对象是 truthy,属性访问返回 undefined 而非崩溃,
-            // `if (foo)` 检查为真,`foo?.bar?.()` 可选链不会报错。
-            [content appendString:@"\nconst _default = Object.freeze({});\nexport default _default;\n"];
+            // default 导出也用 _deep,支持 `import foo from` 默认导入
+            [content appendString:@"\nexport default _deep;\n"];
 
             NSError *wrErr = nil;
             BOOL ok = [content writeToFile:shimPath atomically:YES
