@@ -1,42 +1,111 @@
-```objc
-# Compiled and build artifacts
+```
+# Compiled/Object files
 *.o
 *.obj
 *.a
-*.dylib
+*.lib
 *.so
-*.bundle
+*.dylib
+*.dll
 
-# Dependencies
-Pods/
-Carthage/
-build/
+# Xcode specific
+*.xcodeproj/
 *.xcworkspace/
-xcuserdata/
+*.pbxuser
+*.mode1v3
+*.perspectivev3
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+build/
+DerivedData/
 
-# Logs and temp files
+# iOS/MacOS
+*.framework
+*.app
+*.ipa
+*.dSYM*
+
+# Logs
 *.log
-*.tmp
-*.swp
+*.out
 
-# Environment
+# Temporary files
+*.tmp
+*.temp
+*~
+.swp
+.swo
+
+# Environment variables
 .env
 .env.local
 *.env.*
 
-# Editors
+# IDE specific
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# iOS/Mac specific
-*.ipa
-*.dSYM
-*.app
-*.framework
-*.xcodeproj/
-*.xcworkspace/
-xcuserdata/
-DerivedData/
+# Build outputs
+build/
+dist/
+target/
+out/
+
+# Dependencies
+node_modules/
+vendor/
+Pods/
+
+# Python (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+.venv/
+*.egg-info/
+.eggs/
+.coverage
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.tox/
+
+# Java (if applicable)
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
+target/
+
+# C/C++ (if applicable)
+*.exe
+*.out
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# Archives
+*.zip
+*.tar*
+*.gz
+*.rar
+*.7z
+*.bz2
+*.xz
+*.Z
+*.lz
+*.lzo
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
 ```

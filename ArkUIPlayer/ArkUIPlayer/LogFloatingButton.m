@@ -184,6 +184,12 @@ static const NSUInteger kMaxLogBufferSize = 512 * 1024;
         [[NSNotificationCenter defaultCenter] postNotificationName:kLogMenuRestartHAPNotification object:nil];
     }]];
 
+    [sheet addAction:[UIAlertAction actionWithTitle:@"返回界面"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:kLogMenuBackPressNotification object:nil];
+    }]];
+
     [sheet addAction:[UIAlertAction actionWithTitle:@"复制日志"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {

@@ -44,6 +44,10 @@
                                            selector:@selector(handleRestartHAP)
                                                name:kLogMenuRestartHAPNotification
                                              object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleBackPress)
+                                               name:kLogMenuBackPressNotification
+                                             object:nil];
 }
 
 - (void)dealloc {
@@ -524,6 +528,19 @@
             [strongSelf.hapManager showGlobalError:msg shortText:@"报错"];
         }
     }];
+}
+
+// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API (keyCode=2)
+// 只要 arkui 应用还在前台，不判断导航栈多少，都执行 popViewControllerAnimated
+- (void)handleBackPress {
+    NSLog(@"[HAPList] 菜单：返回界面");
+    
+    // 直接执行 popViewControllerAnimated，不判断导航栈数量
+    @try {
+        [self.navigationController popViewControllerAnimated:YES];
+    } @catch (NSException *e) {
+        NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
+    }
 }
 
 @end
