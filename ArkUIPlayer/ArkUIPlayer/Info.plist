@@ -21,6 +21,18 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
+    <!-- 允许 HTTP 明文连接。
+         hap 应用内部常使用 http:// 访问自建/CDN 服务,
+         iOS 9+ 默认 ATS 会阻止,导致联网失败、图片/接口加载不出来。
+         作为 hap 容器必须放开,否则大量 hap 无法正常工作。 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsArbitraryLoadsInWebContent</key>
+        <true/>
+    </dict>
+
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>arm64</string>

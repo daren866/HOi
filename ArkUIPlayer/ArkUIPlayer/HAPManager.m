@@ -1642,10 +1642,10 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 if (s.length == 0) { i = j + 1; continue; }
                 i = j + 1;
                 // 过滤有效模块名:
-                //   "@hms:xxx" / "@ohos:xxx" — 命名空间模块 (冒号分隔)
+                //   "@hms:xxx" / "@ohos:xxx" / "@app:xxx" — 命名空间模块 (冒号分隔)
                 //   "@kit.XXX" — HarmonyOS API 12+ kit 命名空间 (点号分隔)
                 BOOL isKitMod = [s hasPrefix:@"@kit."];
-                BOOL isNsMod  = ([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@ohos:"]) && [s containsString:@":"];
+                BOOL isNsMod  = ([s hasPrefix:@"@hms:"] || [s hasPrefix:@"@ohos:"] || [s hasPrefix:@"@app:"]) && [s containsString:@":"];
                 if (!isKitMod && !isNsMod) {
                     continue;
                 }
@@ -1663,10 +1663,16 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 // → 整个页面白屏。helloworld 不使用此类 kit,所以能正常渲染。
                 BOOL isHmsMod    = [s hasPrefix:@"@hms:"];
                 BOOL isOhosMod   = [s hasPrefix:@"@ohos:"];
+                BOOL isAppMod    = [s hasPrefix:@"@app:"];
                 BOOL isKitModNS  = [s hasPrefix:@"@kit."];
                 BOOL allowShim   = NO;
                 if (isHmsMod) {
                     // HMS 生态专有模块(HDS 设计系统、系统分享等):iOS 端肯定没实现,允许生成 shim。
+                    allowShim = YES;
+                } else if (isAppMod) {
+                    // @app:bundleName/moduleName/soname — hap 自带的 native so。
+                    // iOS 端没有这些 so(它们是为 HarmonyOS 编译的),运行时导出 undefined,
+                    // 导致 import 报 TypeError。生成 shim 兜底,让 import 拿到空对象而非 undefined。
                     allowShim = YES;
                 } else if (isKitModNS) {
                     // @kit.*: HarmonyOS API 12+ kit 命名空间。
@@ -1693,18 +1699,40 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                         NSLog(@"[HAPManager] Shim: @kit.* allowlisted (HMS proprietary, needs shim): %@", s);
                     }
                 } else if (isOhosMod) {
-                    // @ohos:*: ArkUI-X iOS SDK 的 NAPI 层(libarkui_ios.xcframework 内嵌的 so)已经注册了这些模块,
-                    // 哪怕某些 API 具体函数未实现,ModuleResolver 也能找到 native module,
-                    // 一旦我们写本地 shim 放到 ets/modules/ 下反而会覆盖它,
-                    // 导致原本能工作的导出(比如 @ohos:arkui.node 的 NodeController 类)变成空 class → 组件不渲染 → 白屏。
+                    // @ohos:*: ArkUI-X iOS SDK 的 NAPI 层(libarkui_ios.xcframework 内嵌的 so)已经注册了这些模块。
+                    // 大部分核心模块(@ohos:arkui.* / @ohos:hilog / @ohos:netStack 等)正常工作,不能覆盖。
+                    // 但有部分模块虽注册了 native so,导出却是 undefined(未实现),导致 import 拿到 undefined,
+                    // 调用时抛 TypeError: undefined is not callable → 页面 aboutToAppear 崩溃。
                     //
-                    // 例外清单:极少数 @ohos 下确确实实 iOS 端完全缺失、且 SDK 端计划外的模块才列在这里,
-                    // 但本着"不覆盖原生"的安全第一原则,目前例外清单暂时为空。
+                    // 例外清单:运行时日志确认 "export objects of native so is undefined" 的模块,
+                    // 为它们生成 shim,让 import 拿到空对象/空函数,避免 TypeError 崩溃。
                     static NSArray<NSString *> *ohosAllowlist = nil;
                     static dispatch_once_t onceTok2;
                     dispatch_once(&onceTok2, ^{
                         ohosAllowlist = @[
-                            // 例: @"@ohos:some.module.truly.missing.on.ios",
+                            // 文件 IO (日志确认 undefined)
+                            @"@ohos:fileio",
+                            // promptAction (toast/dialog,日志高频 undefined)
+                            @"@ohos:prompt",
+                            // 后台任务管理
+                            @"@ohos:resourceschedule.backgroundTaskManager",
+                            // wantAgent / wantConstant
+                            @"@ohos:app.ability.wantAgent",
+                            @"@ohos:app.ability.wantConstant",
+                            // 多媒体
+                            @"@ohos:multimedia.avsession",
+                            @"@ohos:multimedia.camera",
+                            @"@ohos:multimedia.cameraPicker",
+                            // 输入法
+                            @"@ohos:inputMethod",
+                            // 电话
+                            @"@ohos:telephony.radio",
+                            // 标识符
+                            @"@ohos:identifier.oaid",
+                            // 多模态输入
+                            @"@ohos:multimodalInput.inputDevice",
+                            // 分布式数据对象
+                            @"@ohos:data.distributedDataObject",
                         ];
                     });
                     for (NSString *pref in ohosAllowlist) {
@@ -1713,6 +1741,7 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     if (!allowShim) {
                         continue;
                     }
+                    NSLog(@"[HAPManager] Shim: @ohos.* allowlisted (native exports undefined, needs shim): %@", s);
                 } else {
                     // 其他命名空间模块(如未来的 @arkui-x:xxx、@thirdparty:xxx):
                     // 大概率是跨平台模块,iOS 端没有原生实现,允许生成 shim 兜底。
@@ -1832,6 +1861,9 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             //     → hms/hds/hdsBaseComponent.ets
             //   "@kit.UIDesignKit" → ns="@kit"(去@→"kit"), tail="UIDesignKit"
             //     → kit/UIDesignKit.ets
+            //   "@app:com.kugou.hmmusic/entry/jengine" → ns="@app"(去@→"app"),
+            //     tail="com.kugou.hmmusic/entry/jengine" → 按 . 和 / 分割
+            //     → app/com/kugou/hmmusic/entry/jengine.ets
             NSMutableArray<NSString *> *pathComps = [NSMutableArray array];
             if ([modSpec hasPrefix:@"@kit."]) {
                 // @kit.XXX → ["kit", "XXX"]
@@ -1839,14 +1871,18 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                 [pathComps addObject:@"kit"];
                 [pathComps addObject:kitName];
             } else {
-                // @hms:xxx.yyy / @ohos:xxx.yyy → ["hms"/"ohos", "xxx", "yyy"]
+                // @hms:xxx / @ohos:xxx / @app:xxx → ["hms"/"ohos"/"app", ...path parts]
                 NSRange colon = [modSpec rangeOfString:@":"];
                 NSString *ns = [modSpec substringToIndex:colon.location];
                 NSString *pathTail = [modSpec substringFromIndex:colon.location + 1];
                 [pathComps addObject:[ns stringByReplacingOccurrencesOfString:@"@" withString:@""]];
-                NSArray<NSString *> *parts = [pathTail componentsSeparatedByString:@"."];
-                for (NSString *p in parts) {
-                    if (p.length > 0) { [pathComps addObject:p]; }
+                // 同时按 . 和 / 分割 (处理 @app:bundle/module/soname 格式)
+                NSArray<NSString *> *dotParts = [pathTail componentsSeparatedByString:@"."];
+                for (NSString *dp in dotParts) {
+                    NSArray<NSString *> *slashParts = [dp componentsSeparatedByString:@"/"];
+                    for (NSString *sp in slashParts) {
+                        if (sp.length > 0) { [pathComps addObject:sp]; }
+                    }
                 }
             }
             NSString *fileName = pathComps.lastObject;
@@ -1961,8 +1997,10 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
                     [content appendFormat:@"export const %@ = Object.freeze({});\n", name];
                 }
             }
-            // 总是额外导出 default 兜底
-            [content appendString:@"\nexport default undefined;\n"];
+            // 总是额外导出 default 兜底,支持 `import foo from '@ohos:xxx'` 默认导入语法。
+            // 用空对象而非 undefined:空对象是 truthy,属性访问返回 undefined 而非崩溃,
+            // `if (foo)` 检查为真,`foo?.bar?.()` 可选链不会报错。
+            [content appendString:@"\nconst _default = Object.freeze({});\nexport default _default;\n"];
 
             NSError *wrErr = nil;
             BOOL ok = [content writeToFile:shimPath atomically:YES
