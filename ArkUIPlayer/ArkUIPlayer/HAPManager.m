@@ -1916,18 +1916,15 @@ static BOOL zip_extract_nsdata(NSData *zipData, NSString *destDir) {
             // Proxy 方案:任何属性访问都返回 _deep 自身(可调用),调用返回 undefined。
             // 这样 obj.method().chain.foo() 整条链都不会崩溃。
             // 如果 ArkTS 不支持 Proxy,try/catch 回退到 _noop 函数(至少直接调用不崩溃)。
-            [content appendString:@"
-// ===== Deep callable: 任何属性访问/调用都安全返回 =====
-function _noop(...args: any[]): any { return undefined; }
-let _deep: any = _noop;
-try {
-    _deep = new Proxy(_noop, {
-        get: function(_t: any, _p: string | symbol): any { return _deep; },
-        apply: function(): any { return undefined; },
-    });
-} catch (_e) { }
-
-"];
+            [content appendString:@"// ===== Deep callable: 任何属性访问/调用都安全返回 =====\n"];
+            [content appendString:@"function _noop(...args: any[]): any { return undefined; }\n"];
+            [content appendString:@"let _deep: any = _noop;\n"];
+            [content appendString:@"try {\n"];
+            [content appendString:@"    _deep = new Proxy(_noop, {\n"];
+            [content appendString:@"        get: function(_t: any, _p: string | symbol): any { return _deep; },\n"];
+            [content appendString:@"        apply: function(): any { return undefined; },\n"];
+            [content appendString:@"    });\n"];
+            [content appendString:@"} catch (_e) { }\n\n"];
 
             for (NSString *name in imports) {
                 // 为每个 import 名生成占位。优先按命名约定判断。
