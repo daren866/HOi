@@ -44,6 +44,10 @@
                                            selector:@selector(handleRestartHAP)
                                                name:kLogMenuRestartHAPNotification
                                              object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleBackPress)
+                                               name:kLogMenuBackPressNotification
+                                             object:nil];
 }
 
 - (void)dealloc {
@@ -524,6 +528,31 @@
             [strongSelf.hapManager showGlobalError:msg shortText:@"报错"];
         }
     }];
+}
+
+// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API
+// 如果有导航栈可以返回，则返回上一页；否则返回首页并卸载当前 HAP
+- (void)handleBackPress {
+    NSLog(@"[HAPList] 菜单：返回界面");
+    
+    // 检查导航栈中是否有可以返回的页面（除了根控制器）
+    if (self.navigationController.viewControllers.count > 1) {
+        // 有页面可以返回，执行返回操作
+        @try {
+            [self.navigationController popViewControllerAnimated:YES];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
+        }
+    } else {
+        // 已经在根控制器或无法返回，执行退出操作
+        @try {
+            [self.navigationController popToRootViewControllerAnimated:YES];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 返回 popToRoot crashed: %@", e);
+        }
+        [self.hapManager unloadCurrentHAP];
+        [self.hapManager hideGlobalError];
+    }
 }
 
 @end
