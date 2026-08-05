@@ -29,7 +29,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.title = @"arkui容器";
+    self.title = @"HOi";
     self.view.backgroundColor = [UIColor whiteColor];
 
     [self setupUI];
@@ -54,10 +54,10 @@
     CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
     
     UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 60)];
-    headerView.backgroundColor = [UIColor colorWithRed:200/255.0 green:200/255.0 blue:200/255.0 alpha:1.0];
+    headerView.backgroundColor = [UIColor clearColor];
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 60)];
-    titleLabel.text = @"arkui容器";
+    titleLabel.text = @"HOi";
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [headerView addSubview:titleLabel];

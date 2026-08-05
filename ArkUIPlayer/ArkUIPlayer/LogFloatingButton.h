@@ -12,6 +12,8 @@
 extern NSNotificationName const kLogMenuExitHAPNotification;
 // 重启 hap 应用的通知。HAPViewController 监听后执行 unloadCurrentHAP + 重新加载。
 extern NSNotificationName const kLogMenuRestartHAPNotification;
+// 返回键通知，模拟 OpenHarmony 虚拟导航栏上的返回键 API
+extern NSNotificationName const kLogMenuBackPressNotification;
 
 + (instancetype)sharedButton;
 
