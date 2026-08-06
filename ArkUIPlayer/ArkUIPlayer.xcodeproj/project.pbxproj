@@ -11,7 +11,7 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5F /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C65 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.mm */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* LogFloatingButton.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C85 /* WindowView.h in Headers */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* WindowView.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -20,18 +20,18 @@
 /* Begin PBXFileReference section */
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6F /* ArkUIPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ArkUIPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C70 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AppDelegate.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C60 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C66 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C68 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C71 /* HAPManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPManager.h; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPManager.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HAPManager.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C72 /* HAPViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPViewController.h; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HAPViewController.mm; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HAPPlayerViewController.h; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HAPPlayerViewController.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* LogFloatingButton.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LogFloatingButton.h; sourceTree = "<group>"; };
-		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LogFloatingButton.m; sourceTree = "<group>"; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = LogFloatingButton.m; sourceTree = "<group>"; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* WindowView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WindowView.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -55,7 +55,7 @@
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C71 /* HAPManager.h */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6A /* HAPManager.m */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C72 /* HAPViewController.h */,
-				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.mm */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C73 /* HAPPlayerViewController.h */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C81 /* LogFloatingButton.h */,
@@ -136,7 +136,7 @@
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5F /* main.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D /* AppDelegate.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C69 /* HAPManager.m in Sources */,
-				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.mm in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* LogFloatingButton.m in Sources */,
 			);

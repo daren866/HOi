@@ -1,20 +1,33 @@
 ```
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+
 # Xcode
-*.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/xcshareddata/
-*.xcodeproj/xcshareddata/
+*.xcodeproj/
+*.xcworkspace/
+*.pbxuser
+*.mode1v3
+*.perspectivev3
+*.xcuserdatad
 *.xccheckout
 *.moved-aside
-*.xcuserstate
+*.xcscmblueprint
+
+# Build artifacts
 build/
 DerivedData/
 
-# Swift
-*.swiftpm/
-Packages/
-.swift-version
+# Logs
+*.log
 
-# General
-.DS_Store
-Thumbs.db
+# Temporary files
+*.tmp
+*.swp
+*~
 ```
