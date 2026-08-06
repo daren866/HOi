@@ -1,55 +1,53 @@
-*.pyc
-*.class
+```
+# Compiled and build artifacts
 *.o
-*.exe
-*.dll
-*.so
-*.a
 *.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
 *.out
+
+# Dependencies
 node_modules/
 venv/
 .venv/
 __pycache__/
-dist/
+*.egg-info/
 build/
-.mypy_cache/
-.pytest_cache/
+dist/
 target/
 .gradle/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
+
+# OS generated files
 .DS_Store
 Thumbs.db
-.env
-.env.local
-*.env.*
-*.log
+
+# Coverage reports
 coverage/
 htmlcov/
 .coverage
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+
+# MyPy cache
+.mypy_cache/
+# Pytest cache
+.pytest_cache/
+```

@@ -2,6 +2,7 @@
 #import "HAPPlayerViewController.h"
 #import "LogFloatingButton.h"
 #import <QuartzCore/QuartzCore.h>
+#import "WindowView.h"
 
 @interface HAPViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 
@@ -530,16 +531,57 @@
     }];
 }
 
-// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API (keyCode=2)
-// 只要 arkui 应用还在前台，不判断导航栈多少，都执行 popViewControllerAnimated
+// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 (keyCode=2)
+// 通过调用 WindowView 的 processBackPressed 方法发送 keyCode=2 事件
 - (void)handleBackPress {
-    NSLog(@"[HAPList] 菜单：返回界面");
+    NSLog(@"[HAPList] 菜单：返回界面 (keyCode=2)");
     
-    // 直接执行 popViewControllerAnimated，不判断导航栈数量
-    @try {
-        [self.navigationController popViewControllerAnimated:YES];
-    } @catch (NSException *e) {
-        NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
+    // 查找当前 navigationController 栈顶的 HAPPlayerViewController
+    UIViewController *topVC = self.navigationController.topViewController;
+    if (![topVC isKindOfClass:[HAPPlayerViewController class]]) {
+        // 如果当前不是 HAPPlayerViewController，则直接执行 pop
+        @try {
+            [self.navigationController popViewControllerAnimated:YES];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
+        }
+        return;
+    }
+    
+    // 在 HAPPlayerViewController 的 view 层级中查找 WindowView
+    UIView *rootView = topVC.view;
+    __block UIView *windowView = nil;
+    void (^findWindowView)(UIView *) = ^(UIView *parent) {
+        for (UIView *sub in parent.subviews) {
+            NSString *cls = NSStringFromClass([sub class]);
+            BOOL isWindowView = [cls containsString:@"WindowView"];
+            if (isWindowView && !windowView) {
+                windowView = sub;
+            }
+            if (sub.subviews.count > 0) {
+                for (UIView *ss in sub.subviews) {
+                    NSString *scls = NSStringFromClass([ss class]);
+                    BOOL isSW = [scls containsString:@"WindowView"];
+                    if (isSW && !windowView) {
+                        windowView = ss;
+                    }
+                }
+            }
+        }
+    };
+    findWindowView(rootView);
+    
+    if (windowView && [windowView respondsToSelector:@selector(processBackPressed)]) {
+        // 调用 WindowView 的 processBackPressed 方法，该方法内部会发送 keyCode=2 的按键事件
+        NSLog(@"[HAPList] 调用 WindowView.processBackPressed() 发送 keyCode=2 虚拟按键事件");
+        [windowView processBackPressed];
+    } else {
+        NSLog(@"[HAPList] ⚠️ 未找到 WindowView，执行默认 pop");
+        @try {
+            [self.navigationController popViewControllerAnimated:YES];
+        } @catch (NSException *e) {
+            NSLog(@"[HAPList] 返回 popViewControllerAnimated crashed: %@", e);
+        }
     }
 }
 
