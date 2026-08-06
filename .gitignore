@@ -4,30 +4,45 @@
 *.obj
 *.a
 *.lib
-*.dylib
 *.so
+*.dylib
 *.dll
+*.exe
+*.out
 
-# Xcode
-*.xcodeproj/
-*.xcworkspace/
-*.pbxuser
-*.mode1v3
-*.perspectivev3
-*.xcuserdatad
-*.xccheckout
-*.moved-aside
-*.xcscmblueprint
-
-# Build artifacts
+# Build directories
 build/
+dist/
+release/
+debug/
+xcodebuild/
+
+# Dependencies
+Pods/
+Carthage/
 DerivedData/
+
+# IDE files
+.xcodeproj/
+xcuserdata/
+*.swp
+*.swo
+*.tmp
 
 # Logs
 *.log
 
-# Temporary files
-*.tmp
-*.swp
-*~
+# Environment
+.env
+.env.local
+*.env.*
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# OS generated files
+.DS_Store
+Thumbs.db
 ```
