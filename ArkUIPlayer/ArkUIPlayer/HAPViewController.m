@@ -531,8 +531,8 @@
     }];
 }
 
-// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 API (keyCode=2)
-// 通过向当前 HAP 的 WindowView 发送 keyCode=2 的虚拟按键事件，让 arkui-x 框架处理返回逻辑
+// 返回界面：模拟 OpenHarmony 虚拟导航栏上的返回键 (keyCode=2)
+// 通过调用 WindowView 的 processBackPressed 方法发送 keyCode=2 事件
 - (void)handleBackPress {
     NSLog(@"[HAPList] 菜单：返回界面 (keyCode=2)");
     
@@ -571,25 +571,10 @@
     };
     findWindowView(rootView);
     
-    if (windowView && [windowView respondsToSelector:@selector(getWindow)]) {
-        // 通过 WindowView 获取底层的 Window 对象并发送 keyCode=2 事件
-        // 这里需要调用 Window 的 ProcessKeyEvent 方法
-        // 由于 ProcessKeyEvent 是 C++ 方法，需要通过 WindowView 的内部接口调用
-        // 使用 processBackPressed 间接触发返回键逻辑
-        NSLog(@"[HAPList] 发送 keyCode=2 虚拟按键事件");
-        
-        // 模拟 keyCode=2 (KEY_BACK) 的按键按下和释放事件
-        int32_t keyCode = 2;  // KEY_BACK
-        int32_t keyActionDown = 0;  // KeyAction::DOWN
-        int32_t keyActionUp = 1;    // KeyAction::UP
-        int64_t timestamp = static_cast<int64_t>([[NSDate date] timeIntervalSince1970] * 1000);
-        
-        // 通过 WindowView 发送按键事件
-        // 由于 WindowView 没有公开 ProcessKeyEvent 接口，我们需要通过其他方式
-        // 这里我们直接调用 processBackPressed 来触发返回逻辑
-        if ([windowView respondsToSelector:@selector(processBackPressed)]) {
-            [windowView processBackPressed];
-        }
+    if (windowView && [windowView respondsToSelector:@selector(processBackPressed)]) {
+        // 调用 WindowView 的 processBackPressed 方法，该方法内部会发送 keyCode=2 的按键事件
+        NSLog(@"[HAPList] 调用 WindowView.processBackPressed() 发送 keyCode=2 虚拟按键事件");
+        [windowView processBackPressed];
     } else {
         NSLog(@"[HAPList] ⚠️ 未找到 WindowView，执行默认 pop");
         @try {
