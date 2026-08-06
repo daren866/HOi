@@ -574,7 +574,8 @@
     if (windowView && [windowView respondsToSelector:@selector(processBackPressed)]) {
         // 调用 WindowView 的 processBackPressed 方法，该方法内部会发送 keyCode=2 的按键事件
         NSLog(@"[HAPList] 调用 WindowView.processBackPressed() 发送 keyCode=2 虚拟按键事件");
-        [windowView processBackPressed];
+        // 使用 performSelector 来调用，避免编译时类型检查问题
+        [windowView performSelector:@selector(processBackPressed)];
     } else {
         NSLog(@"[HAPList] ⚠️ 未找到 WindowView，执行默认 pop");
         @try {
