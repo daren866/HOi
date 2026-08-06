@@ -1,53 +1,44 @@
 ```
-# Compiled and build artifacts
+# Build artifacts
 *.o
 *.obj
 *.a
-*.so
+*.lib
 *.dylib
+*.so
 *.dll
 *.exe
 *.out
 
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-*.egg-info/
-build/
-dist/
-target/
-.gradle/
+# Xcode specific
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcarchive/
+*.app/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Logs
+*.log
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
+# Environment
+.env
+.env.local
+*.env.*
 
-# MyPy cache
-.mypy_cache/
-# Pytest cache
-.pytest_cache/
+# Dependencies
+node_modules/
+vendor/
+Pods/
+
+# Build directories
+build/
+dist/
+target/
 ```
