@@ -14,6 +14,7 @@
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6B /* HAPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6C /* HAPViewController.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6D /* HAPPlayerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C6E /* HAPPlayerViewController.m */; };
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C83 /* LogFloatingButton.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C82 /* LogFloatingButton.m */; };
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C85 /* WindowView.h in Headers */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C84 /* WindowView.h */; settings = {ATTRIBUTES = (Public, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,6 +83,7 @@
 			buildConfigurationList = 0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C78 /* Build configuration list for PBXNativeTarget "ArkUIPlayer" */;
 			buildPhases = (
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C79 /* Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* Headers */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C74 /* Frameworks */,
 				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7A /* Resources */,
 			);
@@ -141,6 +143,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXHeadersBuildPhase section */
+		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C86 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C85 /* WindowView.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0A1B2C3D4E5F6A7B8C9D0E1F2A3B4C7A /* Resources */ = {

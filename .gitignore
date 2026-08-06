@@ -1,44 +1,20 @@
 ```
-# Build artifacts
-*.o
-*.obj
-*.a
-*.lib
-*.dylib
-*.so
-*.dll
-*.exe
-*.out
-
-# Xcode specific
+# Xcode
 *.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/xcuserdata/
-*.xcworkspace/xcuserdata/
-*.xcarchive/
-*.app/
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Logs
-*.log
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Dependencies
-node_modules/
-vendor/
-Pods/
-
-# Build directories
+*.xcodeproj/project.xcworkspace/xcshareddata/
+*.xcodeproj/xcshareddata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
 build/
-dist/
-target/
+DerivedData/
+
+# Swift
+*.swiftpm/
+Packages/
+.swift-version
+
+# General
+.DS_Store
+Thumbs.db
 ```
