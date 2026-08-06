@@ -905,7 +905,7 @@ static HAPManager *_sharedInstance = nil;
     // 但官方 SDK(libarkui_ios.xcframework)的公开导出 Headers 中并未包含它。为了保证 CI
     // 使用预编译 framework 时也能编过,这里改为 performSelector 动态调用,并通过
     // respondsToSelector 做运行时保护。
-    StageApplication *shared = [StageApplication class];
+    StageApplication *shared = [StageApplication sharedInstance];
     if ([shared respondsToSelector:@selector(releaseViewControllers)]) {
         [shared performSelector:@selector(releaseViewControllers)];
     }
