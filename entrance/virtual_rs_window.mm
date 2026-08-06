@@ -52,6 +52,7 @@ Ace::KeyCode KeyCodeToAceKeyCode(int32_t keyCode)
 {
     Ace::KeyCode aceKeyCode = Ace::KeyCode::KEY_UNKNOWN;
     const static std::map<int32_t, Ace::KeyCode> TO_OHOS_KEYCODE_MAP = {
+        { 2      /* HAP Virtual Back Key */,                               Ace::KeyCode::KEY_BACK            },
         { 4      /* UIKeyboardHIDUsageKeyboardA */,                      Ace::KeyCode::KEY_A               },
         { 5      /* UIKeyboardHIDUsageKeyboardB */,                      Ace::KeyCode::KEY_B               },
         { 6      /* UIKeyboardHIDUsageKeyboardC */,                      Ace::KeyCode::KEY_C               },
